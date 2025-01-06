@@ -428,6 +428,15 @@ end
         @test sum(ca) == sum(0:23)
     end
 
+    @testset "Concatenation of unchunked arrays" begin
+        a = UnchunkedDiskArray(rand(10,20))
+        b = UnchunkedDiskArray(rand(15,20))
+        c = UnchunkedDiskArray(rand(18,20))
+        d = cat(a, b, c; dims=1)
+        @test DiskArrays.eachchunk(d) == [(1:10, 1:20); (11:25, 1:20); (26:43, 1:20);;]
+        @test DiskArrays.haschunks(d) isa DiskArrays.Chunked
+    end
+
     @testset "cat mixed chunk size" begin
         a = AccessCountDiskArray(collect(1:10); chunksize=(3,))
         b = AccessCountDiskArray(collect(1:9); chunksize=(4,))

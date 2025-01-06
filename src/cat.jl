@@ -56,7 +56,7 @@ function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray{<:Any,N},M}) wher
     sizes = map(last, si)
 
     chunks = concat_chunksize(D, arrays1)
-    hc = haschunks(first(arrays1))
+    hc = Chunked(batchstrategy(chunks))
 
     return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc)}(arrays1, startinds, sizes, chunks, hc)
 end
