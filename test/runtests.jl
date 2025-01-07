@@ -428,6 +428,15 @@ end
         @test sum(ca) == sum(0:23)
     end
 
+    @testset "Concatenation of unchunked arrays" begin
+        a = UnchunkedDiskArray(rand(10,20))
+        b = UnchunkedDiskArray(rand(15,20))
+        c = UnchunkedDiskArray(rand(18,20))
+        d = cat(a, b, c; dims=1)
+        @test DiskArrays.eachchunk(d) == [(1:10, 1:20); (11:25, 1:20); (26:43, 1:20);;]
+        @test DiskArrays.haschunks(d) isa DiskArrays.Chunked
+    end
+
     @testset "cat mixed chunk size" begin
         a = AccessCountDiskArray(collect(1:10); chunksize=(3,))
         b = AccessCountDiskArray(collect(1:9); chunksize=(4,))
@@ -449,6 +458,19 @@ end
         d .= 1:26
         @test d == 1:26
         @test c == 20:26
+    end
+
+    @testset "ConcatDiskArray works for mixed element types" begin
+        da1 = AccessCountDiskArray(collect(Float64,reshape(1:24, 4, 6, 1)))
+        da2 = AccessCountDiskArray(collect(Float32,reshape(1:24, 4, 6, 1)))
+        @test eltype(da1) <: Float64
+        @test eltype(da2) <: Float32
+        c = DiskArrays.ConcatDiskArray([da1, da2])
+
+        @test eltype(c) <: Float64
+        slic = c[:,1,1]
+        @test slic isa Vector{Float64}
+        @test slic == Float64[1, 2, 3, 4, 1, 2, 3, 4]
     end
 end
 
