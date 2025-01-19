@@ -30,11 +30,14 @@ function eachchunk_view(::Chunked, vv)
     end
     iomit = findints(pinds)
     chunksparent = eachchunk(parent(vv))
-    newchunks = [
-        subsetchunks(chunksparent.chunks[i], pinds[i]) for
-        i in 1:length(pinds) if !in(i, iomit)
-    ]
-    return GridChunks(newchunks...)
+    skipnothing(acc, x) = isnothing(x) ? acc : (acc..., x)
+    newchunks = map(chunksparent.chunks, pinds) do ch, pi
+        pi isa Integer ? nothing : subsetchunks(ch, pi)
+    end
+    filteredchunks = reduce(newchunks; init=()) do acc, x
+        isnothing(x) ? acc : (acc..., x)
+    end
+    return GridChunks(filteredchunks...)
 end
 eachchunk_view(::Unchunked, a) = estimate_chunksize(a)
 haschunks(a::SubDiskArray) = haschunks(parent(a.v))

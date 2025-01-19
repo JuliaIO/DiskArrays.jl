@@ -40,10 +40,13 @@ Determines a list of tuples used to perform the read or write operations. The re
 - `temp_indices` indices for reading from temp array
 - `data_indices` indices for reading from data array
 """
-resolve_indices(a,i) = resolve_indices(a,i,batchstrategy(a))
-resolve_indices(a, i, batch_strategy) = _resolve_indices(eachchunk(a).chunks, i, DiskIndex((),(),(),(),()), batch_strategy)
-resolve_indices(a::AbstractVector, i::Tuple{AbstractVector{<:Integer}}, batch_strategy) = _resolve_indices(eachchunk(a).chunks, i, DiskIndex((), (), (), (), ()), batch_strategy)
-resolve_indices(a, ::Tuple{Colon}, _) = DiskIndex((length(a),), size(a), (Colon(),), (Colon(),), map(s->1:s,size(a)))
+resolve_indices(a, i) = resolve_indices(a,i,batchstrategy(a))
+resolve_indices(a, i, batch_strategy) = 
+    _resolve_indices(eachchunk(a).chunks, i, DiskIndex((),(),(),(),()), batch_strategy)
+resolve_indices(a::AbstractVector, i::Tuple{AbstractVector{<:Integer}}, batch_strategy) = 
+    _resolve_indices(eachchunk(a).chunks, i, DiskIndex((), (), (), (), ()), batch_strategy)
+resolve_indices(a, ::Tuple{Colon}, _) = 
+    DiskIndex((length(a),), size(a), (Colon(),), (Colon(),), map(s->1:s,size(a)))
 resolve_indices(a, i::Tuple{<:CartesianIndex}, batch_strategy=NoBatch()) =
     resolve_indices(a, only(i).I, batch_strategy)
 function resolve_indices(a, i::Tuple{<:AbstractVector{<:Integer}}, batchstrategy)
@@ -235,22 +238,22 @@ function getindex_disk_batch!(out,a,i)
     outputarray
 end
 
-function getindex_disk_nobatch!(out,a,i)
+function getindex_disk_nobatch!(out, a::AbstractArray{T,N}, i) where {T,N}
     indices = resolve_indices(a, i, NoBatch(allow_steprange(a), 1.0))
     #@debug output_size, temparray_size, output_indices, temparray_indices, data_indices
-    outputarray = create_outputarray(out, a, indices.output_size)
-    outalias = output_aliasing(indices,ndims(outputarray),ndims(a))
+    outputarray::Array{T} = create_outputarray(out, a, indices.output_size)
+    outalias = output_aliasing(indices, ndims(outputarray), N)
     if outalias === :identical
         readblock_sizecheck!(a, outputarray, indices.data_indices...)
     elseif outalias === :reshapeoutput
-        temparray = reshape(outputarray,indices.temparray_size)
+        temparray = reshape(outputarray, indices.temparray_size)
         readblock_sizecheck!(a, temparray, indices.data_indices...)
     else
-        temparray = Array{eltype(a)}(undef, indices.temparray_size...)
+        temparray::Array{T} = Array{T}(undef, indices.temparray_size...)
         readblock_sizecheck!(a, temparray, indices.data_indices...)
         transfer_results!(outputarray, temparray, indices.output_indices, indices.temparray_indices)
     end
-    outputarray
+    return outputarray::Array{T}
 end
 
 function getindex_disk!(out, a, i...)
