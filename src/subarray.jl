@@ -28,9 +28,7 @@ function eachchunk_view(::Chunked, vv)
     if any(ind->!isa(ind,Union{Int,AbstractRange,Colon,AbstractVector{<:Integer}}),pinds)
         throw(ArgumentError("Unable to determine chunksize for view of type $(typeof.(pinds))."))
     end
-    iomit = findints(pinds)
     chunksparent = eachchunk(parent(vv))
-    skipnothing(acc, x) = isnothing(x) ? acc : (acc..., x)
     newchunks = map(chunksparent.chunks, pinds) do ch, pi
         pi isa Integer ? nothing : subsetchunks(ch, pi)
     end
