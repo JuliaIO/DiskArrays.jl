@@ -8,6 +8,15 @@ n-dimensional (hyper)-rectangles.
 abstract type AbstractDiskArray{T,N} <: AbstractArray{T,N} end
 
 """
+    isdisk(a::AbstractArray)
+
+Return `true` if `a` is a `AbstractDiskArray` or follows 
+the DiskArrays.jl interface via macros. Otherwise `false`.
+"""
+isdisk(a::AbstractDiskArray) = true
+isdisk(a::AbstractArray) = false
+
+"""
     readblock!(A::AbstractDiskArray, A_ret, r::AbstractUnitRange...)
 
 The only function that should be implemented by a `AbstractDiskArray`. This function
@@ -367,6 +376,7 @@ include("chunks.jl")
 macro implement_getindex(t)
     t = esc(t)
     quote
+        isdisk(a::$t) = true
         Base.getindex(a::$t, i...) = getindex_disk(a, i...)
         @inline Base.getindex(a::$t, i::ChunkIndex{<:Any,OneBasedChunks}) =
             a[eachchunk(a)[i.I]...]

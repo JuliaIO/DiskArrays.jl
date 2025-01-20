@@ -35,6 +35,12 @@ end
     @test a[CartesianIndex(1,2),3] == 15
     @test a[CartesianIndex(1,2,3)] == 15
 end
+@testset "isdisk" begin
+    a = reshape(1:24, 2, 3, 4)
+    da = AccessCountDiskArray(a; chunksize=(2, 2, 2))
+    @test DiskArrays.isdisk(da)
+    @test !DiskArrays.isdisk(a)
+end
 
 @testset "getindex with empty array" begin
     a = AccessCountDiskArray(reshape(1:24,2,3,4),chunksize=(2,2,2))
