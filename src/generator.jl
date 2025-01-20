@@ -62,7 +62,6 @@ function Base.collect_similar(A::AbstractArray, itr::DiskGenerator{<:AbstractArr
     # If the array is chunked, read each chunk and apply the function
     # via broadcasting.
     if DiskArrays.haschunks(input) isa DiskArrays.Chunked
-        # TODO: change this if DiskArrays ever supports uneven chunks
         chunks = eachchunk(input)
         for chunk_inds in chunks
             dest[chunk_inds...] .= itr.f.(input[chunk_inds...])
