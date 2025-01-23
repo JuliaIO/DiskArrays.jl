@@ -287,11 +287,26 @@ end
 
 # Chunked trait
 
-struct Chunked{BS}
+"""
+    abstract type ChunkingTrait
+
+The supertype of all chunk traits, which describe the nature of the chunks of the array
+at a high level.  These do not encode chunk sizes but rather whether the array has chunks or not.
+
+Some traits may also encode the [_chunk strategy_](@ref ChunkStrategy) or _batch strategy_,
+which defines how best to access data within the array.
+
+## Subtypes
+- [`Chunked`](@ref): has some chunks
+- [`Unchunked`](@ref): has no chunks
+"""
+abstract type ChunkingTrait end
+
+struct Chunked{BS} <: ChunkingTrait
     batchstrategy::BS
 end
 Chunked() = Chunked(ChunkRead())
-struct Unchunked{BS}
+struct Unchunked{BS} <: ChunkingTrait
     batchstrategy::BS
 end
 Unchunked() = Unchunked(SubRanges())
