@@ -962,6 +962,29 @@ end
     end
 end
 
+@testset "Padded disk arrays" begin
+    M = (1:100) * (1:120)'
+    A = cat(M, 2M, 3M, 4M; dims=3)
+    ch = ChunkedDiskArray(A, (128, 128, 2))
+    pa = DiskArrays.pad(ch, ((10, 20), (30, 40), (1, 2)); fill=999)
+    @test size(pa) == (130, 190, 7)
+    # All outside
+    @test all(==(999), pa[1:10, 1:30, 1:1])
+    # All inside
+    @test pa[11:20, 31:40, 3:4] == ch[1:10, 1:10, 2:3]
+    # Overlapping lower
+    regions = pa[10:20, 30:40, 1:2]
+    testdata = copy(regions) .= 999
+    testdata[2:11, 2:11, 2:2] .= ch[1:10, 1:10, 1:1]
+    @test regions == testdata
+    # Overlapping upper
+    regions = pa[101:120, 141:160, 5:7]
+    testdata = copy(regions) .= 999
+    testdata[1:10, 1:10, 1:1] .= ch[91:100, 111:120, 4:4]
+    testdata
+    @test regions == testdata
+end
+
 @testset "Range subset identification" begin
     inds = [1,2,2,3,5,6,7,10,10]
     readranges, offsets = DiskArrays.find_subranges_sorted(inds,false)

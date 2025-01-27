@@ -1,7 +1,4 @@
 import Mmap
-# Force disk any abstractarray into a different chunking pattern.
-# This is useful in `zip` and other operations that can iterate
-# over multiple arrays with different patterns.
 
 """
     CachedDiskArray <: AbstractDiskArray
