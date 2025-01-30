@@ -23,8 +23,9 @@ struct RegularChunks <: ChunkType
     offset::Int
     s::Int
     function RegularChunks(cs::Integer, offset::Integer, s::Integer)
-        cs>0 || throw(ArgumentError("Chunk sizes must be strictly positive"))
-        -1 < offset < cs || throw(ArgumentError("Offsets must be positive and smaller than the chunk size"))
+        cs >= 0 || throw(ArgumentError("Chunk sizes must be strictly positive"))
+        (cs == 0 && offset == 0) || (-1 < offset < cs) || 
+            throw(ArgumentError("Offsets must be positive and smaller than the chunk size"))
         s >= 0 || throw(ArgumentError("Negative dimension lengths are not allowed"))
         new(Int(cs), Int(offset), Int(s))
     end
@@ -33,10 +34,15 @@ end
 # Base methods
 
 function Base.getindex(r::RegularChunks, i::Int)
-    @boundscheck checkbounds(r, i)
     return max((i - 1) * r.cs + 1 - r.offset, 1):min(i * r.cs - r.offset, r.s)
 end
-Base.size(r::RegularChunks, _) = div(r.s + r.offset - 1, r.cs) + 1
+function Base.size(r::RegularChunks, n) 
+    if r.cs == 0 || r.s == 0
+        0
+    else
+        div(r.s + r.offset - 1, r.cs) + 1
+    end
+end
 Base.size(r::RegularChunks) = (size(r, 1),)
 
 # DiskArrays interface
