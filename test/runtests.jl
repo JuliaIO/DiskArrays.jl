@@ -890,6 +890,7 @@ struct TestArray{T,N} <: AbstractArray{T,N} end
     DiskArrays.@implement_permutedims TestArray
     DiskArrays.@implement_subarray TestArray
     DiskArrays.@implement_diskarray TestArray
+    @test DiskArrays.isdisk(TestArray) == true
 end
 
 # issue #123

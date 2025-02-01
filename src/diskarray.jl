@@ -13,8 +13,9 @@ abstract type AbstractDiskArray{T,N} <: AbstractArray{T,N} end
 Return `true` if `a` is a `AbstractDiskArray` or follows 
 the DiskArrays.jl interface via macros. Otherwise `false`.
 """
-isdisk(a::AbstractDiskArray) = true
-isdisk(a::AbstractArray) = false
+isdisk(a::AbstractDiskArray) = isdisk(typeof(a))
+isdisk(::Type{<:AbstractDiskArray}) = true
+isdisk(::Type{<:AbstractArray}) = false
 
 """
     readblock!(A::AbstractDiskArray, A_ret, r::AbstractUnitRange...)
@@ -376,7 +377,7 @@ include("chunks.jl")
 macro implement_getindex(t)
     t = esc(t)
     quote
-        isdisk(a::$t) = true
+        DiskArrays.isdisk(::Type{<:$t}) = true
         Base.getindex(a::$t, i...) = getindex_disk(a, i...)
         @inline Base.getindex(a::$t, i::ChunkIndex{<:Any,OneBasedChunks}) =
             a[eachchunk(a)[i.I]...]
