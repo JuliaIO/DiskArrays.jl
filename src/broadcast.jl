@@ -61,9 +61,9 @@ function common_chunks(s, args...)
         totalsize = sum(sizeof ∘ eltype, args)
         return estimate_chunksize(s, totalsize)
     else
-        tt = if length(chunkedarrays) > 1
+        if length(chunkedarrays) > 1
             allchunks = collect(map(eachchunk, chunkedarrays))
-            ntuple(N) do n
+            tt = ntuple(N) do n
                 csnow = filter(allchunks) do cs
                 ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
                 end
