@@ -60,26 +60,24 @@ function common_chunks(s, args...)
     if isempty(chunkedarrays)
         totalsize = sum(sizeof ∘ eltype, args)
         return estimate_chunksize(s, totalsize)
+    elseif length(chunkedarrays) == 1
+        return eachchunk(only(chunkedarrays))
     else
-        if length(chunkedarrays) > 1
-            allchunks = collect(map(eachchunk, chunkedarrays))
-            tt = ntuple(N) do n
-                csnow = filter(allchunks) do cs
-                ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
-                end
-                isempty(csnow) && return RegularChunks(1, 0, s[n])
-                
-                cs = first(csnow).chunks[n]
-                if all(s -> s.chunks[n] == cs, csnow)
-                    return cs
-                else
-                    return merge_chunks(csnow, n)
-                end
+        allchunks = collect(map(eachchunk, chunkedarrays))
+        tt = ntuple(N) do n
+            csnow = filter(allchunks) do cs
+            ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
             end
-            GridChunks(tt...)
-        else
-            eachchunk(only(chunkedarrays))
+            isempty(csnow) && return RegularChunks(1, 0, s[n])
+            
+            cs = first(csnow).chunks[n]
+            if all(s -> s.chunks[n] == cs, csnow)
+                return cs
+            else
+                return merge_chunks(csnow, n)
+            end
         end
+        return GridChunks(tt...)
     end
 end
 
