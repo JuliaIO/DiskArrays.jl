@@ -19,12 +19,12 @@ if VERSION >= v"1.9.0"
     Aqua.test_deps_compat(DiskArrays)
 end
 
-@testset "allow_scalar" begin
-    DiskArrays.allow_scalar(false)
+@testset "allowscalar" begin
+    DiskArrays.allowscalar(false)
     @test DiskArrays.can_scalar() == false
     @test DiskArrays.checkscalar(Bool, 1, 2, 3) == false
     @test DiskArrays.checkscalar(Bool, 1, 2:5, :) == true
-    DiskArrays.allow_scalar(true)
+    DiskArrays.allowscalar(true)
     @test DiskArrays.can_scalar() == true
     @test DiskArrays.checkscalar(Bool, 1, 2, 3) == true
     @test DiskArrays.checkscalar(Bool, :, 2:5, 3) == true
@@ -72,11 +72,11 @@ function test_getindex(a)
     # Test that readblock was called exactly onces for every getindex
     @test a[2:2:4, 1:2:5] == [2 10 18; 4 12 20]
     @test a[[1, 3, 4], [1, 3], 1] == [1 9; 3 11; 4 12]
-    @testset "allow_scalar" begin
-        DiskArrays.allow_scalar(false)
+    @testset "allowscalar" begin
+        DiskArrays.allowscalar(false)
         @test_throws ErrorException a[2, 3, 1]
         @test_throws ErrorException a[5]
-        DiskArrays.allow_scalar(true)
+        DiskArrays.allowscalar(true)
         @test a[2, 3, 1] == 10
         @test a[5] == 5
     end
