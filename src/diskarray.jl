@@ -14,7 +14,6 @@ Return `true` if `a` is a `AbstractDiskArray` or follows
 the DiskArrays.jl interface via macros. Otherwise `false`.
 """
 isdisk(a::AbstractArray) = isdisk(typeof(a))
-isdisk(::Type{<:AbstractDiskArray}) = true
 isdisk(::Type{<:AbstractArray}) = false
 
 """
