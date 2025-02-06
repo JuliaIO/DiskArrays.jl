@@ -10,8 +10,7 @@ using Aqua
 # JET.report_package(DiskArrays)
 
 if VERSION >= v"1.9.0"
-    # These dont resolve even though the suggested methods exist
-    # Aqua.test_ambiguities([DiskArrays, Base, Core])
+    Aqua.test_ambiguities([DiskArrays, Base, Core])
     Aqua.test_unbound_args(DiskArrays)
     Aqua.test_stale_deps(DiskArrays)
     Aqua.test_undefined_exports(DiskArrays)

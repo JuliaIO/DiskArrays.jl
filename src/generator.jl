@@ -76,5 +76,6 @@ macro implement_generator(t)
     t = esc(t)
     quote
         Base.Generator(f, A::$t) = $DiskGenerator(f, A)
+        Base.Generator(::Type{T}, A::$t) where T = $DiskGenerator(T, A)
     end
 end
