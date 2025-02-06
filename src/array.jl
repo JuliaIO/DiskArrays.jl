@@ -1,4 +1,3 @@
-
 macro implement_array_methods(t)
     t = esc(t)
     quote
@@ -6,6 +5,7 @@ macro implement_array_methods(t)
         Base.collect(a::$t) = $_Array(a)
         Base.copyto!(dest::$t, source::AbstractArray) = $_copyto!(dest, source)
         Base.copyto!(dest::AbstractArray, source::$t) = $_copyto!(dest, source)
+        # For ambiguity
         Base.copyto!(dest::$t, source::$t) = $_copyto!(dest, source)
         function Base.copyto!(
             dest::$t, Rdest::CartesianIndices, src::AbstractArray, Rsrc::CartesianIndices
@@ -23,8 +23,8 @@ macro implement_array_methods(t)
             return $_copyto!(dest, Rdest, src, Rsrc)
         end
         # For ambiguity
-        copyto!(dest::PermutedDimsArray, src::$t) = DiskArrays._copyto!(dest, src)
-        function copyto!(dest::PermutedDimsArray{T,N}, src::$t{T,N}) where {T,N}
+        Base.copyto!(dest::PermutedDimsArray, src::$t) = DiskArrays._copyto!(dest, src)
+        function Base.copyto!(dest::PermutedDimsArray{T,N}, src::$t{T,N}) where {T,N}
             return $_copyto!(dest, src)
         end
 
