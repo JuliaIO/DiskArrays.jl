@@ -5,7 +5,6 @@ macro implement_array_methods(t)
         Base.collect(a::$t) = $_Array(a)
         Base.copyto!(dest::$t, source::AbstractArray) = $_copyto!(dest, source)
         Base.copyto!(dest::AbstractArray, source::$t) = $_copyto!(dest, source)
-        # For ambiguity
         Base.copyto!(dest::$t, source::$t) = $_copyto!(dest, source)
         function Base.copyto!(
             dest::$t, Rdest::CartesianIndices, src::AbstractArray, Rsrc::CartesianIndices
