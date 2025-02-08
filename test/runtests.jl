@@ -20,11 +20,11 @@ end
 
 @testset "allowscalar" begin
     DiskArrays.allowscalar(false)
-    @test DiskArrays.can_scalar() == false
+    @test DiskArrays.canscalar() == false
     @test DiskArrays.checkscalar(Bool, 1, 2, 3) == false
     @test DiskArrays.checkscalar(Bool, 1, 2:5, :) == true
     DiskArrays.allowscalar(true)
-    @test DiskArrays.can_scalar() == true
+    @test DiskArrays.canscalar() == true
     @test DiskArrays.checkscalar(Bool, 1, 2, 3) == true
     @test DiskArrays.checkscalar(Bool, :, 2:5, 3) == true
     a = AccessCountDiskArray(reshape(1:24,2,3,4),chunksize=(2,2,2))
@@ -155,7 +155,7 @@ function test_broadcast(a_disk1)
     s = a_disk1 .+ a_disk2 .* Ref(2) ./ (2,)
     # Test lazy broadcasting
     @test s isa DiskArrays.BroadcastDiskArray
-    @test s === DiskArrays.BroadcastDiskArray(s.bc)
+    @test s === DiskArrays.BroadcastDiskArray(s.broadcasted)
     @test getindex_count(a_disk1) == 0
     @test setindex_count(a_disk1) == 0
     @test getindex_count(a_disk2) == 0
@@ -316,9 +316,9 @@ end
 end
 
 @testset "AbstractDiskArray setindex" begin
-    for bs in (DiskArrays.ChunkRead,DiskArrays.SubRanges)
-        for sr in (DiskArrays.CanStepRange, DiskArrays.NoStepRange)
-            a = AccessCountDiskArray(zeros(Int, 4, 5, 1),batchstrategy=bs(sr,0.5))
+    for BS in (DiskArrays.ChunkRead, DiskArrays.SubRanges)
+        for sr in (DiskArrays.CanStepRange(), DiskArrays.NoStepRange())
+            a = AccessCountDiskArray(zeros(Int, 4, 5, 1), batchstrategy=BS(sr, 0.5))
             test_setindex(a)
         end
     end
@@ -516,20 +516,20 @@ end
 @testset "Alignment of temporary and output arrays" begin
     a = AccessCountDiskArray(reshape(1:20, 4, 5, 1); chunksize=(4, 1, 1))
     i = (1:3,:,:)
-    di = DiskArrays.resolve_indices(a,i,DiskArrays.NoBatch())
+    di = DiskArrays.DiskIndex(a,i,DiskArrays.NoBatch())
     @test DiskArrays.output_aliasing(di,3,3) == :identical
     @test DiskArrays.output_aliasing(di,2,3) == :reshapeoutput
     i = (1,:,:)
-    di = DiskArrays.resolve_indices(a,i,DiskArrays.NoBatch())
+    di = DiskArrays.DiskIndex(a,i,DiskArrays.NoBatch())
     @test DiskArrays.output_aliasing(di,2,2) == :reshapeoutput
     i = ([1,3],:,:)
-    di = DiskArrays.resolve_indices(a,i,DiskArrays.NoBatch())
+    di = DiskArrays.DiskIndex(a,i,DiskArrays.NoBatch())
     @test DiskArrays.output_aliasing(di,3,3) == :noalign
     i = (1:3,:)
-    di = DiskArrays.resolve_indices(a,i,DiskArrays.NoBatch())
+    di = DiskArrays.DiskIndex(a,i,DiskArrays.NoBatch())
     @test DiskArrays.output_aliasing(di,2,2) == :reshapeoutput
     i = (1:3,:,:,1,1)
-    di = DiskArrays.resolve_indices(a,i,DiskArrays.NoBatch())
+    di = DiskArrays.DiskIndex(a,i,DiskArrays.NoBatch())
     @test DiskArrays.output_aliasing(di,3,3) == :identical
 end
 

@@ -1,8 +1,15 @@
 
 """
     ConcatDiskArray <: AbstractDiskArray
+    
+    ConcatDiskArray(arrays)
 
-Joins multiple AbstractArrays or AbstractDiskArrays in lazy concatination.
+Joins multiple `AbstractArray`s or `AbstractDiskArray`s into
+a single disk array, using lazy concatination.
+
+Returned from `cat` on disk arrays. 
+
+It is also useful on its own as it can easily concatenate an array of disk arrays.
 """
 struct ConcatDiskArray{T,N,P,C,HC} <: AbstractDiskArray{T,N}
     parents::P
@@ -69,18 +76,24 @@ end
 
 Base.size(a::ConcatDiskArray) = a.size
 
+# DiskArrays interface
+
+eachchunk(a::ConcatDiskArray) = a.chunks
+haschunks(c::ConcatDiskArray) = c.haschunks
+
 function readblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     # Find affected blocks and indices in blocks
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
         aout[outer_range...] = a.parents[I][array_range...]
     end
 end
-
 function writeblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
         a.parents[I][array_range...] = aout[outer_range...]
     end
 end
+
+# Utils
 
 function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
     # Find affected blocks and indices in blocks
@@ -103,8 +116,6 @@ function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
     end
 end
 
-haschunks(c::ConcatDiskArray) = c.haschunks
-
 function concat_chunksize(N, parents)
     oldchunks = map(eachchunk, parents)
     newchunks = ntuple(N) do i
@@ -117,22 +128,17 @@ function concat_chunksize(N, parents)
     return GridChunks(newchunks...)
 end
 
-function eachchunk(aconc::ConcatDiskArray{T,N}) where {T,N}
-    aconc.chunks
-end
-
 function mergechunks(a::RegularChunks, b::RegularChunks)
-    if a.s == 0 || (a.cs == b.cs && length(last(a)) == a.cs)
-        RegularChunks(a.cs, a.offset, a.s + b.s)
+    if a.arraysize == 0 || (a.chunksize == b.chunksize && length(last(a)) == a.chunksize)
+        RegularChunks(a.chunksize, a.offset, a.arraysize + b.arraysize)
     else
         mergechunks_irregular(a, b)
     end
 end
+mergechunks(a::ChunkVector, b::ChunkVector) = mergechunks_irregular(a, b)
 
-mergechunks(a::ChunkType, b::ChunkType) = mergechunks_irregular(a, b)
-function mergechunks_irregular(a, b)
-    return IrregularChunks(; chunksizes=filter(!iszero, [length.(a); length.(b)]))
-end
+mergechunks_irregular(a, b) =
+    IrregularChunks(; chunksizes=filter(!iszero, [length.(a); length.(b)]))
 
 function cat_disk(dims, As::AbstractArray...)
     if length(dims) == 1
@@ -142,7 +148,6 @@ function cat_disk(dims, As::AbstractArray...)
         throw(ArgumentError("Block concatenation is not yet implemented for DiskArrays."))
     end
 end
-
 function cat_disk(dims::Int, As::AbstractArray...)
     sz = map(ntuple(identity, dims)) do i
         i == dims ? length(As) : 1

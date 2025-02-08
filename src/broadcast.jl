@@ -13,33 +13,31 @@ function Base.BroadcastStyle(::DefaultArrayStyle{M}, ::ChunkStyle{N}) where {N,M
 end
 
 struct BroadcastDiskArray{T,N,BC<:Broadcasted{<:ChunkStyle{N}}} <: AbstractDiskArray{T,N}
-    bc::BC
+    broadcasted::BC
 end
-function BroadcastDiskArray(bcf::B) where {B<:Broadcasted{<:ChunkStyle{N}}} where {N}
-    ElType = Base.Broadcast.combine_eltypes(bcf.f, bcf.args)
-    return BroadcastDiskArray{ElType,N,B}(bcf)
+function BroadcastDiskArray(broadcasted::B) where {B<:Broadcasted{<:ChunkStyle{N}}} where {N}
+    ElType = Base.Broadcast.combine_eltypes(broadcasted.f, broadcasted.args)
+    return BroadcastDiskArray{ElType,N,B}(broadcasted)
 end
 
 # Base methods
 
-Base.size(bc::BroadcastDiskArray) = size(bc.bc)
-function DiskArrays.readblock!(a::BroadcastDiskArray, aout, i::OrdinalRange...)
-    argssub = map(arg -> subsetarg(arg, i), a.bc.args)
-    return aout .= a.bc.f.(argssub...)
-end
-Base.broadcastable(bc::BroadcastDiskArray) = bc.bc
-function Base.copy(bc::Broadcasted{ChunkStyle{N}}) where {N}
-    return BroadcastDiskArray(flatten(bc))
-end
-Base.copy(a::BroadcastDiskArray) = copyto!(zeros(eltype(a), size(a)), a.bc)
-function Base.copyto!(dest::AbstractArray, bc::Broadcasted{ChunkStyle{N}}) where {N}
-    bcf = flatten(bc)
+Base.size(a::BroadcastDiskArray) = size(a.broadcasted)
+Base.broadcastable(a::BroadcastDiskArray) = a.broadcasted
+Base.copy(a::BroadcastDiskArray) = copyto!(zeros(eltype(a), size(a)), a.broadcasted)
+
+Base.copy(broadcasted::Broadcasted{ChunkStyle{N}}) where {N} =
+    BroadcastDiskArray(flatten(broadcasted))
+function Base.copyto!(dest::AbstractArray, broadcasted::Broadcasted{ChunkStyle{N}}) where {N}
+    bcf = flatten(broadcasted)
+    # Get a list of chunks to apply
     gcd = common_chunks(size(bcf), dest, bcf.args...)
-    foreach(gcd) do cnow
+    # Apply the broadcast to dest chunk by chunk
+    foreach(gcd) do chunk
         # Possible optimization would be to use a LRU cache here, so that data has not
         # to be read twice in case of repeating indices
-        argssub = map(i -> subsetarg(i, cnow), bcf.args)
-        view(dest, cnow...) .= bcf.f.(argssub...)
+        argssub = map(arg -> subsetarg(arg, chunk), bcf.args)
+        view(dest, chunk...) .= bcf.f.(argssub...)
     end
     return dest
 end
@@ -47,9 +45,15 @@ end
 # DiskArrays interface
 
 haschunks(a::BroadcastDiskArray) = Chunked()
-function eachchunk(a::BroadcastDiskArray)
-    return common_chunks(size(a.bc), a.bc.args...)
+eachchunk(a::BroadcastDiskArray) = 
+    common_chunks(size(a.broadcasted), a.broadcasted.args...)
+function readblock!(a::BroadcastDiskArray, aout, i::OrdinalRange...)
+    argssub = map(arg -> subsetarg(arg, i), a.broadcasted.args)
+    return aout .= a.broadcasted.f.(argssub...)
 end
+
+# Utility methods
+
 function common_chunks(s, args...)
     N = length(s)
     chunkedars = filter(i -> haschunks(i) === Chunked(), collect(args))
@@ -76,20 +80,19 @@ function common_chunks(s, args...)
     end
 end
 
-# Utility methods
-
 to_ranges(r::Tuple) = r
 to_ranges(r::CartesianIndices) = r.indices
 
 function merge_chunks(csnow, n)
+    # The first offset is always zero
+    offsets = Int[0]
     chpos = [1 for ch in csnow]
-    chunk_offsets = Int[0]
     while true
         # Get the largest chunk end point
-        cur_chunks = map(chpos, csnow) do i, ch
+        currentchunks = map(chpos, csnow) do i, ch
             ch.chunks[n][i]
         end
-        chend = maximum(last.(cur_chunks))
+        chend = maximum(last.(currentchunks))
         # Find the position where the end of a chunk matches the new chunk endpoint
         newchpos = map(chpos, csnow) do i, ch
             found = findnext(x -> last(x) == chend, ch.chunks[n], i)
@@ -105,28 +108,28 @@ function merge_chunks(csnow, n)
         # If this is the last chunk, break
         chpos[1] >= length(firstcs) && break
         # Add our new offset
-        push!(chunk_offsets, newchunkoffset)
+        push!(offsets, newchunkoffset)
     end
-    push!(chunk_offsets, last(last(csnow[1].chunks[n])))
-    return IrregularChunks(chunk_offsets)
+    push!(offsets, last(last(csnow[1].chunks[n])))
+    return IrregularChunks(offsets)
 end
 
-subsetarg(x, a) = x
-function subsetarg(x::AbstractArray, a)
-    ashort = maybeonerange(size(x), a)
-    return view(x, ashort...) # Maybe making a copy here would be faster, need to check...
-end
-repsingle(s, r) = s == 1 ? (1:1) : r
+subsetarg(arg, ranges) = arg
+# Maybe making a copy here would be faster, need to check...
+subsetarg(arg::AbstractArray, ranges) = 
+    view(arg, maybeonerange(size(arg), ranges)...) 
+
+maybeonerange(sizes, ranges) = maybeonerange((), sizes, ranges)
 function maybeonerange(out, sizes, ranges)
-    s1, sr = splittuple(sizes...)
-    r1, rr = splittuple(ranges...)
+    s1, sr... = sizes
+    r1, rr... = ranges
     return maybeonerange((out..., repsingle(s1, r1)), sr, rr)
 end
 maybeonerange(out, ::Tuple{}, ranges) = out
 maybeonerange(out, sizes, ::Tuple{}) = out
 maybeonerange(out, ::Tuple{}, ::Tuple{}) = out
-maybeonerange(sizes, ranges) = maybeonerange((), sizes, ranges)
-splittuple(x1, xr...) = x1, xr
+
+repsingle(size, range) = size == 1 ? (1:1) : range
 
 # Implementation macro
 
@@ -142,9 +145,9 @@ macro implement_broadcast(t)
             return dest
         end
         Base.BroadcastStyle(T::Type{<:$t}) = ChunkStyle{ndims(T)}()
-        function DiskArrays.subsetarg(x::$t, a)
-            ashort = maybeonerange(size(x), a)
-            return x[ashort...]
+        function DiskArrays.subsetarg(arg::$t, ranges)
+            ashort = maybeonerange(size(arg), ranges)
+            return arg[ashort...]
         end
 
         # This is a heavily allocating implementation, but working for all cases.

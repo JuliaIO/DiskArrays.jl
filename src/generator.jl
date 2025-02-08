@@ -1,4 +1,11 @@
+"""
+    DiskGenerator{I,F}
 
+Replaces `Base.Generator` for disk arrays.
+
+Operates out-of-order over chunks, but `collect` 
+will create an array in the correct order.
+"""
 struct DiskGenerator{I,F}
     f::F
     iter::I
