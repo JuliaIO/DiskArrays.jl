@@ -38,6 +38,8 @@ function Base.getindex(r::RegularChunks, i::Int)
 end
 Base.size(r::RegularChunks, _) = div(r.s + r.offset - 1, r.cs) + 1
 Base.size(r::RegularChunks) = (size(r, 1),)
+Base.:(==)(r1::RegularChunks, r2::RegularChunks) =
+    r1.cs == r2.cs && r1.offset == r2.offset && r1.s == r2.s
 
 # DiskArrays interface
 
@@ -135,6 +137,9 @@ function Base.getindex(r::IrregularChunks, i::Int)
     return (r.offsets[i] + 1):r.offsets[i + 1]
 end
 Base.size(r::IrregularChunks) = (length(r.offsets) - 1,)
+Base.:(==)(r1::IrregularChunks, r2::IrregularChunks) =
+    r1 === r2 || r1.offsets == r2.offsets
+
 function subsetchunks(r::IrregularChunks, subs::UnitRange)
     c1 = findchunk(r, first(subs))
     c2 = findchunk(r, last(subs))
