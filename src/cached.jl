@@ -4,7 +4,7 @@ import Mmap
     ChunkTiledDiskArray <: AbstractDiskArray
 
 And abstract supertype for disk arrays that have fast indexing
-of tiled chunks already stored as separate arrays, such as [`CachedArray`](@ref).
+of tiled chunks already stored as separate arrays, such as [`CachedDiskArray`](@ref).
 """
 abstract type ChunkTiledDiskArray{T,N} <: AbstractDiskArray{T,N} end
 
