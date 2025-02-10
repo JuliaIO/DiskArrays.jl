@@ -25,7 +25,7 @@ canscalar() = ALLOWSCALAR[]
 # Checks if an index is scalar at all, and then if scalar indexing is allowed. 
 # Syntax as for `checkbounds`.
 checkscalar(::Type{Bool}, I::Tuple) = checkscalar(Bool, I...)
-checkscalar(::Type{Bool}, I...) = !all(map(i -> i isa Int, I)) || can_scalar()
+checkscalar(::Type{Bool}, I...) = !all(map(i -> i isa Int, I)) || canscalar()
 checkscalar(I::Tuple) = checkscalar(I...)
 checkscalar(I...) = checkscalar(Bool, I...) || _scalar_error()
 

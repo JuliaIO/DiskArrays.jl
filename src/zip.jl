@@ -1,4 +1,15 @@
 
+"""
+    DiskZip
+
+Replaces `Zip` for disk arrays, for calling `zip` on disk arrays.
+
+Reads out-of-order over chunks, but `collect`s to the correct order.
+Less flexible than `Base.Zip` as it can only zip with other `AbstractArray`.
+
+Note: currently only one of the first two arguments of `zip` must be a disk
+array to return `DiskZip`.
+"""
 struct DiskZip{Is<:Tuple}
     is::Is
 end
