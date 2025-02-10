@@ -35,7 +35,7 @@ function _disk_reverse(A, dims::Tuple)
 end
 
 _disk_reverse1(a) = _disk_reverse(a, 1)
-function _disk_reverse1(a, start::Int, stop::Int) 
+function _disk_reverse1(a, start::Int, stop::Int)
     inds = [firstindex(a):start-1; stop:-1:start; stop+1:lastindex(a)]
     return view(a, inds)
 end
@@ -79,7 +79,7 @@ macro implement_array_methods(t)
 
         Base.reverse(a::$t; dims=:) = $_disk_reverse(a, dims)
         Base.reverse(a::$t{<:Any,1}) = $_disk_reverse1(a)
-        Base.reverse(a::$t{<:Any,1}, start::Integer, stop::Integer=lastindex(a)) = 
+        Base.reverse(a::$t{<:Any,1}, start::Integer, stop::Integer=lastindex(a)) =
             $_disk_reverse1(a, start, stop)
 
         # Here we extend the unexported `_replace` method, but we replicate 

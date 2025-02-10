@@ -30,7 +30,7 @@ eachchunk(a::SubDiskArray) = eachchunk_view(haschunks(a.v.parent), a.v)
 
 function eachchunk_view(::Chunked, vv)
     pinds = parentindices(vv)
-    if any(ind->!isa(ind,Union{Int,AbstractRange,Colon,AbstractVector{<:Integer}}),pinds)
+    if any(ind -> !isa(ind, Union{Int,AbstractRange,Colon,AbstractVector{<:Integer}}), pinds)
         throw(ArgumentError("Unable to determine chunksize for view of type $(typeof.(pinds))."))
     end
     chunksparent = eachchunk(parent(vv))
@@ -54,6 +54,6 @@ macro implement_subarray(t)
             return SubDiskArray(SubArray(a, i2))
         end
         Base.view(a::$t, i::CartesianIndices) = view(a, i.indices...)
-        Base.vec(a::$t) = view(a,:)
+        Base.vec(a::$t) = view(a, :)
     end
 end

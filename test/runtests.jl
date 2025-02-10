@@ -27,12 +27,12 @@ end
     @test DiskArrays.canscalar() == true
     @test DiskArrays.checkscalar(Bool, 1, 2, 3) == true
     @test DiskArrays.checkscalar(Bool, :, 2:5, 3) == true
-    a = AccessCountDiskArray(reshape(1:24,2,3,4),chunksize=(2,2,2))
-    @test a[1,2,3] == 15
-    @test a[1,2,3,1] == 15
-    @test_throws BoundsError a[1,2]
-    @test a[CartesianIndex(1,2),3] == 15
-    @test a[CartesianIndex(1,2,3)] == 15
+    a = AccessCountDiskArray(reshape(1:24, 2, 3, 4), chunksize=(2, 2, 2))
+    @test a[1, 2, 3] == 15
+    @test a[1, 2, 3, 1] == 15
+    @test_throws BoundsError a[1, 2]
+    @test a[CartesianIndex(1, 2), 3] == 15
+    @test a[CartesianIndex(1, 2, 3)] == 15
 end
 @testset "isdisk" begin
     a = reshape(1:24, 2, 3, 4)
@@ -42,7 +42,7 @@ end
 end
 
 @testset "getindex with empty array" begin
-    a = AccessCountDiskArray(reshape(1:24,2,3,4),chunksize=(2,2,2))
+    a = AccessCountDiskArray(reshape(1:24, 2, 3, 4), chunksize=(2, 2, 2))
     @test a[Int[]] == Float64[]
 end
 
@@ -56,11 +56,11 @@ function test_getindex(a)
     @test a[2, 3, 1, 1:1] == [10]
     @test a[2, 3, 1, [1], [1]] == fill(10, 1, 1)
     @test a[:, 3, 1, [1]] == reshape(9:12, 4, 1)
-    @test a[CartesianIndices((1:2,1:2)),1] == [1 5; 2 6]
+    @test a[CartesianIndices((1:2, 1:2)), 1] == [1 5; 2 6]
     @test getindex_count(a) == 10
     # Test bitmask indexing
     m = falses(4, 5, 1)
-    m[2, [1,2,3,5], 1] .= true
+    m[2, [1, 2, 3, 5], 1] .= true
     @test a[m] == [2, 6, 10, 18]
     # Test linear indexing
     @test a[:] == 1:20
@@ -103,14 +103,14 @@ function test_setindex(a)
     a[[2, 4], 1:2, 1] = [1 2; 5 6]
     @test trueparent(a)[[2, 4], 1:2, 1] == [1 2; 5 6]
     @test setindex_count(a) == 8
-    a[CartesianIndex(1,1,1)] = -10
-    @test trueparent(a)[1,1,1] == -10
+    a[CartesianIndex(1, 1, 1)] = -10
+    @test trueparent(a)[1, 1, 1] == -10
 end
 
 function test_view(a)
     v = view(a, 2:3, 2:4, 1)
 
-    @test @inferred(size(v)) == (2,3)
+    @test @inferred(size(v)) == (2, 3)
     v[1:2, 1] = [1, 2]
     v[1:2, 2:3] = [4 4; 4 4]
     @test v[1:2, 1] == [1, 2]
@@ -216,10 +216,10 @@ end
     @test size(a2) == (10,)
     @test_throws BoundsError a2[0]
     @test_throws BoundsError a2[11]
-    @test_throws ArgumentError RegularChunks(0,2,10)
-    @test_throws ArgumentError RegularChunks(2,-1,10)
-    @test_throws ArgumentError RegularChunks(2,2,10)
-    @test_throws ArgumentError RegularChunks(5,2,-1)
+    @test_throws ArgumentError RegularChunks(0, 2, 10)
+    @test_throws ArgumentError RegularChunks(2, -1, 10)
+    @test_throws ArgumentError RegularChunks(2, 2, 10)
+    @test_throws ArgumentError RegularChunks(5, 2, -1)
     b1 = IrregularChunks(; chunksizes=[3, 3, 4, 3, 3])
     @test b1[1] == 1:3
     @test b1[2] == 4:6
@@ -241,8 +241,8 @@ end
     @test DiskArrays.approx_chunksize(gridc) == (5, 2, 3)
     @test DiskArrays.grid_offset(gridc) == (2, 0, 0)
     @test DiskArrays.max_chunksize(gridc) == (5, 2, 4)
-    @test_throws ArgumentError IrregularChunks([1,2,3])
-    @test_throws ArgumentError IrregularChunks([0,5,4])
+    @test_throws ArgumentError IrregularChunks([1, 2, 3])
+    @test_throws ArgumentError IrregularChunks([0, 5, 4])
     # Make sure mixed Integer types work
     @test RegularChunks(Int32(5), 2, UInt32(10)) == RegularChunks(5, 2, 10)
 end
@@ -271,7 +271,7 @@ end
     @test subsetchunks(r1, [28, 27, 19, 17, 10, 7]) == [1:3, 4:5, 6:6]
     @test subsetchunks(r1, [1, 2, 3]) == [1:3]
     @test subsetchunks(r1, [1, 2, 3, 10, 11]) == [1:3, 4:5]
-    @test subsetchunks(r1, [3, 4, 11, 13, 1]) == [1:2,3:4,5:5]
+    @test subsetchunks(r1, [3, 4, 11, 13, 1]) == [1:2, 3:4, 5:5]
 
     r2 = IrregularChunks(; chunksizes=[3, 3, 4, 3, 3, 4])
     @test subsetchunks(r2, 1:20) == r2
@@ -298,17 +298,17 @@ end
 end
 
 @testset "Index strategy decisions" begin
-    @test DiskArrays.has_chunk_gap(10,[1,8]) == false
-    @test DiskArrays.has_chunk_gap(10,[1,8,30]) == true
-    @test DiskArrays.is_sparse_index([1:10;40:50];density_threshold=0.5) == true
-    @test DiskArrays.is_sparse_index([1:10;40:50];density_threshold=0.1) == false
+    @test DiskArrays.has_chunk_gap(10, [1, 8]) == false
+    @test DiskArrays.has_chunk_gap(10, [1, 8, 30]) == true
+    @test DiskArrays.is_sparse_index([1:10; 40:50]; density_threshold=0.5) == true
+    @test DiskArrays.is_sparse_index([1:10; 40:50]; density_threshold=0.1) == false
 end
 
 @testset "AbstractDiskArray getindex" begin
-    for bs in (DiskArrays.ChunkRead,DiskArrays.SubRanges)
+    for bs in (DiskArrays.ChunkRead, DiskArrays.SubRanges)
         for sr in (DiskArrays.CanStepRange(), DiskArrays.NoStepRange())
-            for ds in (0.5,1.0)
-                a = AccessCountDiskArray(reshape(1:20, 4, 5, 1),batchstrategy=bs(sr,ds))
+            for ds in (0.5, 1.0)
+                a = AccessCountDiskArray(reshape(1:20, 4, 5, 1), batchstrategy=bs(sr, ds))
                 test_getindex(a)
             end
         end
@@ -350,11 +350,11 @@ import Statistics: mean
         da = AccessCountDiskArray(a, chunksize=(2,))
         db = AccessCountDiskArray(b, chunksize=(2,))
         @test any(da)
-        @test any(==(true),da)
+        @test any(==(true), da)
         @test !all(db)
-        @test !all(==(true),db)
-        @test getindex_count(da)==2
-        @test getindex_count(db)==2
+        @test !all(==(true), db)
+        @test getindex_count(da) == 2
+        @test getindex_count(db) == 2
     end
 end
 
@@ -422,10 +422,10 @@ end
         @test collect(cat(a, b; dims=(3,))) == cat(collect(a), collect(b); dims=(3,))
         @test collect(cat(a, b; dims=(4,))) == cat(collect(a), collect(b); dims=(4,))
         @test collect(cat(a, b; dims=(5,))) == cat(collect(a), collect(b); dims=(5,))
-    end 
+    end
 
     @testset "cat with 2-tuple" begin
-        @test_throws ArgumentError cat(a,b, dims=(1,2))
+        @test_throws ArgumentError cat(a, b, dims=(1, 2))
     end
 
     @testset "write concat" begin
@@ -434,9 +434,9 @@ end
     end
 
     @testset "Concatenation of unchunked arrays" begin
-        a = UnchunkedDiskArray(rand(10,20))
-        b = UnchunkedDiskArray(rand(15,20))
-        c = UnchunkedDiskArray(rand(18,20))
+        a = UnchunkedDiskArray(rand(10, 20))
+        b = UnchunkedDiskArray(rand(15, 20))
+        c = UnchunkedDiskArray(rand(18, 20))
         d = cat(a, b, c; dims=1)
         @test DiskArrays.eachchunk(d) == [(1:10, 1:20); (11:25, 1:20); (26:43, 1:20);;]
         @test DiskArrays.haschunks(d) isa DiskArrays.Chunked
@@ -466,14 +466,14 @@ end
     end
 
     @testset "ConcatDiskArray works for mixed element types" begin
-        da1 = AccessCountDiskArray(collect(Float64,reshape(1:24, 4, 6, 1)))
-        da2 = AccessCountDiskArray(collect(Float32,reshape(1:24, 4, 6, 1)))
+        da1 = AccessCountDiskArray(collect(Float64, reshape(1:24, 4, 6, 1)))
+        da2 = AccessCountDiskArray(collect(Float32, reshape(1:24, 4, 6, 1)))
         @test eltype(da1) <: Float64
         @test eltype(da2) <: Float32
         c = DiskArrays.ConcatDiskArray([da1, da2])
 
         @test eltype(c) <: Float64
-        slic = c[:,1,1]
+        slic = c[:, 1, 1]
         @test slic isa Vector{Float64}
         @test slic == Float64[1, 2, 3, 4, 1, 2, 3, 4]
     end
@@ -493,44 +493,44 @@ end
 
 if VERSION >= v"1.7.0"
     @testset "Broadcasted assignment with trailing singleton dimensions" begin
-        a1 = rand(10,9,1,1)
+        a1 = rand(10, 9, 1, 1)
         a_disk1 = AccessCountDiskArray(a1)
-        s = zeros(10,9)
+        s = zeros(10, 9)
         @test begin
             s .= a_disk1
-            s == a1[:,:,1,1]
+            s == a1[:, :, 1, 1]
         end
     end
 end
 
 @testset "Type inference for indexing" begin
-    data = rand(1:99,10,10,10)
-    a1 = AccessCountDiskArray(data,chunksize=(10,10,1));
-    @test @inferred a1[:,:,1] == data[:,:,1]
-    @test @inferred a1[1:3:10,5,:] == data[1:3:10,5,:]
-    @test @inferred a1[[1,3],[2,4],:] == data[[1,3],[2,4],:]
-    @test @inferred a1[:,CartesianIndex.([(1,2),(5,6),(2,6)])] ==  data[:,CartesianIndex.([(1,2),(5,6),(2,6)])]
+    data = rand(1:99, 10, 10, 10)
+    a1 = AccessCountDiskArray(data, chunksize=(10, 10, 1))
+    @test @inferred a1[:, :, 1] == data[:, :, 1]
+    @test @inferred a1[1:3:10, 5, :] == data[1:3:10, 5, :]
+    @test @inferred a1[[1, 3], [2, 4], :] == data[[1, 3], [2, 4], :]
+    @test @inferred a1[:, CartesianIndex.([(1, 2), (5, 6), (2, 6)])] == data[:, CartesianIndex.([(1, 2), (5, 6), (2, 6)])]
 end
 
 
 @testset "Alignment of temporary and output arrays" begin
     a = AccessCountDiskArray(reshape(1:20, 4, 5, 1); chunksize=(4, 1, 1))
-    i = (1:3,:,:)
-    di = DiskArrays.DiskIndex(a,i,DiskArrays.NoBatch())
-    @test DiskArrays.output_aliasing(di,3,3) == :identical
-    @test DiskArrays.output_aliasing(di,2,3) == :reshapeoutput
-    i = (1,:,:)
-    di = DiskArrays.DiskIndex(a,i,DiskArrays.NoBatch())
-    @test DiskArrays.output_aliasing(di,2,2) == :reshapeoutput
-    i = ([1,3],:,:)
-    di = DiskArrays.DiskIndex(a,i,DiskArrays.NoBatch())
-    @test DiskArrays.output_aliasing(di,3,3) == :noalign
-    i = (1:3,:)
-    di = DiskArrays.DiskIndex(a,i,DiskArrays.NoBatch())
-    @test DiskArrays.output_aliasing(di,2,2) == :reshapeoutput
-    i = (1:3,:,:,1,1)
-    di = DiskArrays.DiskIndex(a,i,DiskArrays.NoBatch())
-    @test DiskArrays.output_aliasing(di,3,3) == :identical
+    i = (1:3, :, :)
+    di = DiskArrays.DiskIndex(a, i, DiskArrays.NoBatch())
+    @test DiskArrays.output_aliasing(di, 3, 3) == :identical
+    @test DiskArrays.output_aliasing(di, 2, 3) == :reshapeoutput
+    i = (1, :, :)
+    di = DiskArrays.DiskIndex(a, i, DiskArrays.NoBatch())
+    @test DiskArrays.output_aliasing(di, 2, 2) == :reshapeoutput
+    i = ([1, 3], :, :)
+    di = DiskArrays.DiskIndex(a, i, DiskArrays.NoBatch())
+    @test DiskArrays.output_aliasing(di, 3, 3) == :noalign
+    i = (1:3, :)
+    di = DiskArrays.DiskIndex(a, i, DiskArrays.NoBatch())
+    @test DiskArrays.output_aliasing(di, 2, 2) == :reshapeoutput
+    i = (1:3, :, :, 1, 1)
+    di = DiskArrays.DiskIndex(a, i, DiskArrays.NoBatch())
+    @test DiskArrays.output_aliasing(di, 3, 3) == :identical
 end
 
 
@@ -541,8 +541,8 @@ end
 
     #Test with empty vectors
     @test a[Int[]] == Int[]
-    @test a[:,Int[],:] == zeros(Int,4,0,1)
-    @test a[Int[],:,:] == zeros(Int,0,5,1)
+    @test a[:, Int[], :] == zeros(Int, 4, 0, 1)
+    @test a[Int[], :, :] == zeros(Int, 0, 5, 1)
     @test getindex_count(a) == 1
 
     coords = CartesianIndex.([(1, 1, 1), (3, 1, 1), (2, 4, 1), (4, 4, 1)])
@@ -593,21 +593,21 @@ end
     @test setindex_count(b) == 1
 
     #Test for #131
-    a = reshape(1:75,5,5,3)
-    a1 = AccessCountDiskArray(a);
-    i = ([1,2],[2,3],:)
+    a = reshape(1:75, 5, 5, 3)
+    a1 = AccessCountDiskArray(a)
+    i = ([1, 2], [2, 3], :)
     r = a1[i...]
-    @test size(r) == (2,2,3)
+    @test size(r) == (2, 2, 3)
     @test r == a[i...]
     @test getindex_count(a1) == 1
     # This Bool vector is supposed to need batching
     i = Bool[1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1]
-    u = UnchunkedDiskArray(rand(275,305,36))
-    @test u[i,1,1][1] == u[findfirst(i),1,1]
+    u = UnchunkedDiskArray(rand(275, 305, 36))
+    @test u[i, 1, 1][1] == u[findfirst(i), 1, 1]
 
     # Test for #180
-    test_arr = rand(100,100,100)
-    a180 = AccessCountDiskArray(test_arr; chunksize=(10,10,20))
+    test_arr = rand(100, 100, 100)
+    a180 = AccessCountDiskArray(test_arr; chunksize=(10, 10, 20))
 
     idx = [rand(1:100)]
     @test all(a180[idx, :, :] .== test_arr[idx, :, :])
@@ -630,12 +630,12 @@ end
 @testset "Vector getindex strategies" begin
     using DiskArrays: NoStepRange, CanStepRange
     a_inner = rand(100)
-    inds_sorted = [1,1,1,3,5,6,6,7,10,13,16,16,19,20]
+    inds_sorted = [1, 1, 1, 3, 5, 6, 6, 7, 10, 13, 16, 16, 19, 20]
     inds_unsorted = [7, 5, 1, 16, 1, 10, 20, 6, 19, 1, 13, 6, 3, 16]
-    inds_sorted_matrix = reshape(inds_sorted,7,2)
-    inds_unsorted_matrix = reshape(inds_unsorted,7,2)
-    a = AccessCountDiskArray(a_inner,chunksize=(10,),batchstrategy=DiskArrays.ChunkRead(NoStepRange(),0.5));
-    b1 = a[inds_sorted];
+    inds_sorted_matrix = reshape(inds_sorted, 7, 2)
+    inds_unsorted_matrix = reshape(inds_unsorted, 7, 2)
+    a = AccessCountDiskArray(a_inner, chunksize=(10,), batchstrategy=DiskArrays.ChunkRead(NoStepRange(), 0.5))
+    b1 = a[inds_sorted]
     @test b1 == a_inner[inds_sorted]
     @test getindex_log(a) == [(1:20,)]
     empty!(a.getindex_log)
@@ -643,7 +643,7 @@ end
     @test b2 == a_inner[inds_unsorted]
     @test getindex_log(a) == [(1:20,)]
     empty!(a.getindex_log)
-    b3 = a[inds_sorted_matrix];
+    b3 = a[inds_sorted_matrix]
     @test size(b3) == size(a_inner[inds_sorted_matrix])
     @test b3 == a_inner[inds_sorted_matrix]
     @test getindex_log(a) == [(1:20,)]
@@ -653,9 +653,9 @@ end
     @test getindex_log(a) == [(1:20,)]
     empty!(a.getindex_log)
 
-    
-    a = AccessCountDiskArray(a_inner,chunksize=(5,),batchstrategy=DiskArrays.ChunkRead(CanStepRange(),0.8));
-    b1 = a[inds_sorted];
+
+    a = AccessCountDiskArray(a_inner, chunksize=(5,), batchstrategy=DiskArrays.ChunkRead(CanStepRange(), 0.8))
+    b1 = a[inds_sorted]
     @test b1 == a_inner[inds_sorted]
     @test sort(getindex_log(a)) == [(1:5,), (6:10,), (13:13,), (16:20,)]
     empty!(a.getindex_log)
@@ -663,26 +663,26 @@ end
     @test b2 == a_inner[inds_unsorted]
     @test sort(getindex_log(a)) == [(1:5,), (6:10,), (13:13,), (16:20,)]
     empty!(a.getindex_log)
-    b3 = a[inds_sorted_matrix];
+    b3 = a[inds_sorted_matrix]
     @test b3 == a_inner[inds_sorted_matrix]
     @test sort(getindex_log(a)) == [(1:5,), (6:10,), (13:13,), (16:20,)]
     empty!(a.getindex_log)
     b4 = a[inds_unsorted_matrix]
     @test b4 == a_inner[inds_unsorted_matrix]
     @test sort(getindex_log(a)) == [(1:5,), (6:10,), (13:13,), (16:20,)]
-    
-    
-    a = AccessCountDiskArray(a_inner,chunksize=(10,),batchstrategy=DiskArrays.SubRanges(CanStepRange(),0.5));
-    b1 = a[inds_sorted];
+
+
+    a = AccessCountDiskArray(a_inner, chunksize=(10,), batchstrategy=DiskArrays.SubRanges(CanStepRange(), 0.5))
+    b1 = a[inds_sorted]
     @test b1 == a_inner[inds_sorted]
     @test getindex_log(a) == [(1:20,)]
     empty!(a.getindex_log)
     b2 = a[inds_unsorted]
     @test b2 == a_inner[inds_unsorted]
     @test getindex_log(a) == [(1:20,)]
-    
-    a = AccessCountDiskArray(a_inner,chunksize=(5,),batchstrategy=DiskArrays.SubRanges(CanStepRange(),0.8));
-    b1 = a[inds_sorted];
+
+    a = AccessCountDiskArray(a_inner, chunksize=(5,), batchstrategy=DiskArrays.SubRanges(CanStepRange(), 0.8))
+    b1 = a[inds_sorted]
     @test b1 == a_inner[inds_sorted]
     @test sort(getindex_log(a)) == [(1:2:5,), (6:7,), (10:3:19,), (20:20,)]
     empty!(a.getindex_log)
@@ -690,16 +690,16 @@ end
     @test b2 == a_inner[inds_unsorted]
     @test sort(getindex_log(a)) == [(1:2:5,), (6:7,), (10:3:19,), (20:20,)]
     empty!(a.getindex_log)
-    b3 = a[inds_sorted_matrix];
+    b3 = a[inds_sorted_matrix]
     @test b3 == a_inner[inds_sorted_matrix]
     @test sort(getindex_log(a)) == [(1:2:5,), (6:7,), (10:3:19,), (20:20,)]
     empty!(a.getindex_log)
     b4 = a[inds_unsorted_matrix]
     @test b4 == a_inner[inds_unsorted_matrix]
     @test sort(getindex_log(a)) == [(1:2:5,), (6:7,), (10:3:19,), (20:20,)]
-    
-    a = AccessCountDiskArray(a_inner,chunksize=(5,),batchstrategy=DiskArrays.SubRanges(NoStepRange(),0.8));
-    b1 = a[inds_sorted];
+
+    a = AccessCountDiskArray(a_inner, chunksize=(5,), batchstrategy=DiskArrays.SubRanges(NoStepRange(), 0.8))
+    b1 = a[inds_sorted]
     @test b1 == a_inner[inds_sorted]
     @test sort(getindex_log(a)) == [(1:1,), (3:3,), (5:7,), (10:10,), (13:13,), (16:16,), (19:20,)]
     empty!(a.getindex_log)
@@ -707,14 +707,14 @@ end
     @test b2 == a_inner[inds_unsorted]
     @test sort(getindex_log(a)) == [(1:1,), (3:3,), (5:7,), (10:10,), (13:13,), (16:16,), (19:20,)]
     empty!(a.getindex_log)
-    b3 = a[inds_sorted_matrix];
+    b3 = a[inds_sorted_matrix]
     @test b3 == a_inner[inds_sorted_matrix]
     @test sort(getindex_log(a)) == [(1:1,), (3:3,), (5:7,), (10:10,), (13:13,), (16:16,), (19:20,)]
     empty!(a.getindex_log)
     b4 = a[inds_unsorted_matrix]
     @test b4 == a_inner[inds_unsorted_matrix]
     @test sort(getindex_log(a)) == [(1:1,), (3:3,), (5:7,), (10:10,), (13:13,), (16:16,), (19:20,)]
-    end
+end
 
 @testset "generator" begin
     a = collect(reshape(1:90, 10, 9))
@@ -749,7 +749,7 @@ end
         @test x == a
         copyto!(x, CartesianIndices((1:3, 1:2)), a_disk, CartesianIndices((8:10, 8:9)))
         # Test copyto! with zero length index
-        x_empty = Matrix{Int64}(undef, 0,2)
+        x_empty = Matrix{Int64}(undef, 0, 2)
         copyto!(x_empty, CartesianIndices((1:0, 1:2)), a_disk, CartesianIndices((8:7, 8:9)))
         # copyto! with different length should throw an error
         @test_throws ArgumentError copyto!(x, CartesianIndices((1:1, 1:2)), a_disk, CartesianIndices((4:6, 8:9)))
@@ -762,8 +762,8 @@ end
     # ERROR: ArgumentError: Can only subset chunks for sorted indices
     @test reverse(view(a_disk, :, 1), 5) == reverse(a[:, 1], 5)
     @test reverse(view(a_disk, :, 1), 5, 10) == reverse(a[:, 1], 5, 10)
-    @test collect(reverse(a_disk)) == collect(reverse(a_disk; dims=:)) == 
-        collect(reverse(a_disk; dims=(1, 2))) == reverse(a)
+    @test collect(reverse(a_disk)) == collect(reverse(a_disk; dims=:)) ==
+          collect(reverse(a_disk; dims=(1, 2))) == reverse(a)
     @test collect(reverse(a_disk; dims=2)) == reverse(a; dims=2)
     @test replace(a_disk, 1 => 2) == replace(a, 1 => 2)
     @test rotr90(a_disk) == rotr90(a)
@@ -899,40 +899,40 @@ mutable struct ResizableArray{T,N} <: AbstractArray{T,N}
 end
 
 Base.size(RA::ResizableArray) = size(RA.A)
-Base.getindex(RA::ResizableArray,inds...) = getindex(RA.A,inds...)
-Base.checkbounds(::Type{Bool},RA::ResizableArray,inds...) = all(minimum.(inds) .> 0)
-function Base.setindex!(RA::ResizableArray{T,N}, value, inds::Vararg{Int, N}) where {T,N}
-    sz = max.(size(RA),inds)
+Base.getindex(RA::ResizableArray, inds...) = getindex(RA.A, inds...)
+Base.checkbounds(::Type{Bool}, RA::ResizableArray, inds...) = all(minimum.(inds) .> 0)
+function Base.setindex!(RA::ResizableArray{T,N}, value, inds::Vararg{Int,N}) where {T,N}
+    sz = max.(size(RA), inds)
     if sz != size(RA)
         # grow
         oldA = RA.A
-        RA.A = Array{T,N}(undef,sz)
+        RA.A = Array{T,N}(undef, sz)
         RA.A[axes(oldA)...] = oldA
     end
     RA.A[inds...] = value
 end
 
 @testset "Resizable arrays" begin
-    a = ResizableArray(Vector{Int}(undef,0))
+    a = ResizableArray(Vector{Int}(undef, 0))
     @test size(a) == (0,)
     a[1:5] = 1:5
     @test a == 1:5
     @test size(a) == (5,)
 
-    b = ResizableArray(Vector{Int}(undef,0))
-    b1 = AccessCountDiskArray(b,chunksize=(5,))
+    b = ResizableArray(Vector{Int}(undef, 0))
+    b1 = AccessCountDiskArray(b, chunksize=(5,))
     @test size(b1) == (0,)
     b1[1:5] = 1:5
     @test b1 == 1:5
     @test size(b1) == (5,)
     @test setindex_count(b1) == 1
 
-    c = ResizableArray(Matrix{Int}(undef,(0,0)))
-    c1 = AccessCountDiskArray(c,chunksize=(5,5))
-    @test size(c1) == (0,0)
-    c1[1:5,1:5] = ones(Int,5,5)
-    @test c1 == ones(Int,5,5)
-    @test size(c1) == (5,5)
+    c = ResizableArray(Matrix{Int}(undef, (0, 0)))
+    c1 = AccessCountDiskArray(c, chunksize=(5, 5))
+    @test size(c1) == (0, 0)
+    c1[1:5, 1:5] = ones(Int, 5, 5)
+    @test c1 == ones(Int, 5, 5)
+    @test size(c1) == (5, 5)
     @test setindex_count(c1) == 1
 end
 
@@ -963,25 +963,25 @@ end
 end
 
 @testset "Range subset identification" begin
-    inds = [1,2,2,3,5,6,7,10,10]
-    readranges, offsets = DiskArrays.find_subranges_sorted(inds,false)
-    @test readranges == [1:3,5:7,10:10]
-    @test offsets    == [1:4,5:7,8:9]
-    inds = [1,1,1,3,5,6,6,7,10,13,16,16,19,20]
-    readranges, offsets = DiskArrays.find_subranges_sorted(inds,false)
+    inds = [1, 2, 2, 3, 5, 6, 7, 10, 10]
+    readranges, offsets = DiskArrays.find_subranges_sorted(inds, false)
+    @test readranges == [1:3, 5:7, 10:10]
+    @test offsets == [1:4, 5:7, 8:9]
+    inds = [1, 1, 1, 3, 5, 6, 6, 7, 10, 13, 16, 16, 19, 20]
+    readranges, offsets = DiskArrays.find_subranges_sorted(inds, false)
     @test readranges == [1:1, 3:3, 5:7, 10:10, 13:13, 16:16, 19:20]
     @test offsets == [1:3, 4:4, 5:8, 9:9, 10:10, 11:12, 13:14]
-    readranges, offsets = DiskArrays.find_subranges_sorted(inds,true)
+    readranges, offsets = DiskArrays.find_subranges_sorted(inds, true)
     @test readranges == [1:2:5, 6:7, 10:3:19, 20:20]
     @test offsets == [1:5, 6:8, 9:13, 14:14]
 end
 
 @testset "Show not indexing" begin
-    A = AccessCountDiskArray(rand(19,10))
+    A = AccessCountDiskArray(rand(19, 10))
     sprint(show, MIME("text/plain"), A)
     @test getindex_count(A) == 0
-    sprint(show, [A,A])
-    @test getindex_count(A) == 0 
+    sprint(show, [A, A])
+    @test getindex_count(A) == 0
 end
 
 @testset "Map over indices correctly" begin
@@ -989,8 +989,8 @@ end
     # `map` should always work over the correct indices,
     # especially since we overload generators to `DiskArrayGenerator`.
 
-    data = [i+j for i in 1:200, j in 1:100]
-    da = AccessCountDiskArray(data, chunksize=(10,10))
+    data = [i + j for i in 1:200, j in 1:100]
+    da = AccessCountDiskArray(data, chunksize=(10, 10))
     @test map(identity, da) == data
     @test all(map(identity, da) .== data)
 

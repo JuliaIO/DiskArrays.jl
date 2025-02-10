@@ -19,10 +19,10 @@ struct ConcatDiskArray{T,N,P,C,HC} <: AbstractDiskArray{T,N}
     haschunks::HC
 end
 function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray{<:Any,N},M}) where {N,M}
-    T = mapreduce(eltype,promote_type, init = eltype(first(arrays)),arrays)
-        
+    T = mapreduce(eltype, promote_type, init=eltype(first(arrays)), arrays)
+
     function othersize(x, id)
-        return (x[1:(id - 1)]..., x[(id + 1):end]...)
+        return (x[1:(id-1)]..., x[(id+1):end]...)
     end
     if N > M
         newshape = (size(arrays)..., ntuple(_ -> 1, N - M)...)
@@ -109,7 +109,7 @@ function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
             max(first(indstoread) - si[ii] + 1, 1):min(last(indstoread) - si[ii] + 1, ms)
         end
         outer_range = map(cI.I, a.startinds, array_range, inds) do ii, si, ar, indstoread
-            (first(ar) + si[ii] - first(indstoread)):(last(ar) + si[ii] - first(indstoread))
+            (first(ar)+si[ii]-first(indstoread)):(last(ar)+si[ii]-first(indstoread))
         end
         # aout[outer_range...] = a.parents[cI][array_range...]
         f(outer_range, array_range, cI)
@@ -142,8 +142,8 @@ mergechunks_irregular(a, b) =
 
 function cat_disk(dims, As::AbstractArray...)
     if length(dims) == 1
-    dims = only(dims)
-    cat_disk(dims, As...)
+        dims = only(dims)
+        cat_disk(dims, As...)
     else
         throw(ArgumentError("Block concatenation is not yet implemented for DiskArrays."))
     end

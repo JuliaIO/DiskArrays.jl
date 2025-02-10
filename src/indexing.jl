@@ -13,7 +13,7 @@ end
 Base.size(a::MultiReadArray) = _mapflatten(length, a.a)
 Base.IndexStyle(::Type{<:MultiReadArray}) = IndexCartesian()
 Base.eachindex(a::MultiReadArray) = CartesianIndices(size(a))
-Base.getindex(a::MultiReadArray{<:Any,N}, I::Vararg{Int, N}) where N =
+Base.getindex(a::MultiReadArray{<:Any,N}, I::Vararg{Int,N}) where {N} =
     map(getindex, a.a, I) |> _flatten1
 
 _mapflatten(f, x) = foldl((x, y) -> (x..., f(y)), x; init=())
@@ -60,9 +60,9 @@ getindex_disk(a::AbstractArray, i...) = getindex_disk!(nothing, a, i...)
 function getindex_disk!(out::Union{Nothing,AbstractArray}, a::AbstractArray, i...)
     # Check if we can write once or need to use multiple batches
     if need_batch(a, i)
-        getindex_disk_batch!(out,a,i)
+        getindex_disk_batch!(out, a, i)
     else
-        getindex_disk_nobatch!(out,a,i)
+        getindex_disk_nobatch!(out, a, i)
     end
 end
 
@@ -102,7 +102,7 @@ function getindex_disk_nobatch!(out::Union{Nothing,AbstractArray}, a::AbstractAr
         readblock_checked!(a, outputarray, indices.data_indices...)
     elseif outalias === :reshapeoutput
         # We need to reshape the output first, then read
-        reshaped_output = reshape(outputarray,indices.temparray_size)
+        reshaped_output = reshape(outputarray, indices.temparray_size)
         readblock_checked!(a, reshaped_output, indices.data_indices...)
     else # :noalign
         # outputarray is only a subset of the chunk, so copy to temparray first
@@ -204,7 +204,7 @@ Generate an `Array` to pass to `readblock!`
 function create_outputarray(out::AbstractArray, a::AbstractArray, output_size::Tuple)
     size(out) == output_size || throw(ArgumentError("Expected output array size of $output_size"))
     return out
-end 
+end
 create_outputarray(::Nothing, a::AbstractArray, output_size::Tuple) =
     Array{eltype(a)}(undef, output_size...)
 
@@ -241,7 +241,7 @@ end
 
 Check if disk array `a` needs batch indexing for indices `i`, returning a `Bool`.
 """
-Base.@assume_effects :foldable need_batch(a::AbstractArray, i) = 
+Base.@assume_effects :foldable need_batch(a::AbstractArray, i) =
     _need_batch(eachchunk(a).chunks, i, batchstrategy(a))
 
 function _need_batch(chunks, i, batch_strategy)
@@ -255,17 +255,17 @@ _need_batch(_, ::Tuple{}, _) = false
 # Integer,UnitRange and Colon are contiguous and dont need batching
 _need_batch_index(::Union{Integer,UnitRange,Colon}, chunks, _) = false, Base.tail(chunks)
 # CartesianIndices are contiguous, also dont need batching, but chunks need splitting
-_need_batch_index(i::CartesianIndices{N}, chunks, _) where N = false, last(splitchunks(i, chunks))
+_need_batch_index(i::CartesianIndices{N}, chunks, _) where {N} = false, last(splitchunks(i, chunks))
 # CartesianIndex doesn't need batching, but chunks need splitting
-_need_batch_index(i::CartesianIndex{N}, chunks, _) where N = false, last(splitchunks(i, chunks))
+_need_batch_index(i::CartesianIndex{N}, chunks, _) where {N} = false, last(splitchunks(i, chunks))
 # StepRange doesn't need batching for CanStepRange strategies
 _need_batch_index(::StepRange, chunks, ::BatchStrategy{CanStepRange}) = false, Base.tail(chunks)
 # Everything else may need batching
 function _need_batch_index(i, chunks, batchstrategy)
     chunksnow, chunksrem = splitchunks(i, chunks)
     allow_multi = allow_multi_chunk_access(batchstrategy)
-    needsbatch = (allow_multi || has_chunk_gap(approx_chunksize.(chunksnow), i)) && 
-        is_sparse_index(i; density_threshold=density_threshold(batchstrategy))
+    needsbatch = (allow_multi || has_chunk_gap(approx_chunksize.(chunksnow), i)) &&
+                 is_sparse_index(i; density_threshold=density_threshold(batchstrategy))
     return needsbatch, chunksrem
 end
 
@@ -312,7 +312,7 @@ macro implement_getindex(t)
             wrapchunk(a[nooffset(i)], eachchunk(a)[i.I])
         function DiskArrays.ChunkIndices(a::$t; offset=false)
             return ChunkIndices(
-                map(s->1:s,size(eachchunk(a))), offset ? OffsetChunks() : OneBasedChunks()
+                map(s -> 1:s, size(eachchunk(a))), offset ? OffsetChunks() : OneBasedChunks()
             )
         end
     end

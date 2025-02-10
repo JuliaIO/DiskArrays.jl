@@ -32,11 +32,11 @@ abstract type BatchStrategy{S<:AllowStepRange} end
 
 A chunking strategy that avoids batching into multiple reads.
 """
-@kwdef struct NoBatch{S} <: BatchStrategy{S} 
+@kwdef struct NoBatch{S} <: BatchStrategy{S}
     allow_steprange::S = NoStepRange()
     density_threshold::Float64 = 0.5
 end
-NoBatch(from::BatchStrategy) = 
+NoBatch(from::BatchStrategy) =
     NoBatch(from.allow_steprange, from.density_threshold)
 
 """
@@ -45,11 +45,11 @@ NoBatch(from::BatchStrategy) =
 A chunking strategy that splits contiguous streaks 
 into ranges to be read separately.
 """
-@kwdef struct SubRanges{S} <: BatchStrategy{S} 
+@kwdef struct SubRanges{S} <: BatchStrategy{S}
     allow_steprange::S = NoStepRange()
     density_threshold::Float64 = 0.5
 end
-SubRanges(from::BatchStrategy) = 
+SubRanges(from::BatchStrategy) =
     SubRanges(from.allow_steprange, from.density_threshold)
 """
     ChunkRead <: BatchStrategy
@@ -57,17 +57,17 @@ SubRanges(from::BatchStrategy) =
 A chunking strategy splits a dataset according to chunk,
 and reads chunk by chunk.
 """
-@kwdef struct ChunkRead{S} <: BatchStrategy{S} 
+@kwdef struct ChunkRead{S} <: BatchStrategy{S}
     allow_steprange::S = NoStepRange()
     density_threshold::Float64 = 0.5
 end
-ChunkRead(from::BatchStrategy) = 
+ChunkRead(from::BatchStrategy) =
     ChunkRead(from.allow_steprange, from.density_threshold)
 
 batchstrategy(x) = batchstrategy(haschunks(x))
 
 allow_steprange(a) = allow_steprange(batchstrategy(a))
-allow_steprange(::BatchStrategy{S}) where S = allow_steprange(S)
+allow_steprange(::BatchStrategy{S}) where {S} = allow_steprange(S)
 allow_steprange(::Type{CanStepRange}) = true
 allow_steprange(::Type{NoStepRange}) = false
 allow_steprange(::CanStepRange) = true
@@ -94,9 +94,9 @@ has_chunk_gap(chunksize, ids) = true
 
 # Compute the number of possible indices in the hyperrectangle
 function span(a::AbstractArray{<:Integer})
-    iszero(length(a)) ? 0 : 1 -(-(extrema(a)...))
+    iszero(length(a)) ? 0 : 1 - (-(extrema(a)...))
 end
-function span(a::AbstractArray{CartesianIndex{N}}) where N
+function span(a::AbstractArray{CartesianIndex{N}}) where {N}
     minind, maxind = extrema(a)
     prod((maxind - minind + oneunit(minind)).I)
 end
@@ -108,7 +108,7 @@ end
 numind(a::AbstractArray{Bool}) = sum(a)
 numind(a::Union{AbstractArray{<:Integer},AbstractArray{<:CartesianIndex}}) = length(a)
 
-function is_sparse_index(ids; density_threshold = 0.5)
+function is_sparse_index(ids; density_threshold=0.5)
     indexdensity = numind(ids) / span(ids)
     return indexdensity < density_threshold
 end
@@ -138,11 +138,11 @@ function find_subranges_sorted(inds, allow_steprange=false)
             else
                 #Need to close the range
                 if current_step == 1
-                    push!(rangelist,inds[current_base]:inds[iind])
+                    push!(rangelist, inds[current_base]:inds[iind])
                 else
-                    push!(rangelist,inds[current_base]:current_step:inds[iind])
+                    push!(rangelist, inds[current_base]:current_step:inds[iind])
                 end
-                push!(outputinds,current_base:iind)
+                push!(outputinds, current_base:iind)
                 current_base = iind + 1
                 current_step = 0
                 continue
@@ -163,7 +163,7 @@ end
 # perm result
 function mysortperm(i)
     p = collect(vec(CartesianIndices(i)))
-    sort!(p;by=Base.Fix1(getindex,i))
+    sort!(p; by=Base.Fix1(getindex, i))
     p
 end
 mysortperm(i::AbstractVector) = sortperm(i)
@@ -172,15 +172,15 @@ mysortperm(i::AbstractVector) = sortperm(i)
 function process_index(i, chunks::Tuple{Vararg{ChunkVector}}, strategy::Union{ChunkRead,SubRanges})
     ii, chunksrem = process_index(i, chunks, NoBatch(strategy))
     di = DiskIndex(
-        ii.output_size, 
-        ii.temparray_size, 
-        ([ii.output_indices],), 
-        ([ii.temparray_indices],), 
+        ii.output_size,
+        ii.temparray_size,
+        ([ii.output_indices],),
+        ([ii.temparray_indices],),
         ([ii.data_indices],)
     )
     return di, chunksrem
 end
-function process_index(i::AbstractArray{<:Integer,N}, chunks::Tuple{Vararg{ChunkVector}}, ::ChunkRead) where N
+function process_index(i::AbstractArray{<:Integer,N}, chunks::Tuple{Vararg{ChunkVector}}, ::ChunkRead) where {N}
     chunksdict = Dict{Int,Vector{Pair{Int,CartesianIndex{N}}}}()
     # Look for affected chunks
     for outindex in CartesianIndices(i)
@@ -209,17 +209,17 @@ function process_index(i::AbstractArray{<:Integer,N}, chunks::Tuple{Vararg{Chunk
     return di, Base.tail(chunks)
 end
 # Implement NCDatasets behavior of splitting list of indices into ranges
-function process_index(i::AbstractArray{<:Integer,N}, chunks::Tuple{Vararg{ChunkVector}}, s::SubRanges) where N
+function process_index(i::AbstractArray{<:Integer,N}, chunks::Tuple{Vararg{ChunkVector}}, s::SubRanges) where {N}
     di = if i isa AbstractVector && issorted(i)
-        rangelist, outputinds = find_subranges_sorted(i,allow_steprange(s))
+        rangelist, outputinds = find_subranges_sorted(i, allow_steprange(s))
         datainds = tuple.(rangelist)
-        tempinds = map(rangelist,outputinds) do rl,oi
-            v = view(i,oi)
-            r = map(x->(x-first(v))÷step(rl)+1,v)
+        tempinds = map(rangelist, outputinds) do rl, oi
+            v = view(i, oi)
+            r = map(x -> (x - first(v)) ÷ step(rl) + 1, v)
             (r,)
         end
         outinds = tuple.(outputinds)
-        tempsize = maximum(length,rangelist)
+        tempsize = maximum(length, rangelist)
         DiskIndex((length(i),), (tempsize,), (outinds,), (tempinds,), (datainds,))
     else
         p = mysortperm(i)
@@ -228,21 +228,21 @@ function process_index(i::AbstractArray{<:Integer,N}, chunks::Tuple{Vararg{Chunk
         datainds = tuple.(rangelist)
         tempinds = map(rangelist, outputinds) do rl, oi
             v = view(i_sorted, oi)
-            r = map(x->(x-first(v))÷step(rl)+1,v)
+            r = map(x -> (x - first(v)) ÷ step(rl) + 1, v)
             (r,)
         end
         outinds = map(outputinds) do oi
-            (view(p,oi),)
+            (view(p, oi),)
         end
         tempsize = maximum(length(rangelist))
         DiskIndex(size(i), (tempsize,), (outinds,), (tempinds,), (datainds,))
     end
     return di, Base.tail(chunks)
 end
-function process_index(i::AbstractArray{Bool,N}, chunks::Tuple{Vararg{ChunkVector}}, cr::ChunkRead) where N
+function process_index(i::AbstractArray{Bool,N}, chunks::Tuple{Vararg{ChunkVector}}, cr::ChunkRead) where {N}
     process_index(findall(i), chunks, cr)
 end
-function process_index(i::AbstractArray{Bool,N}, chunks::Tuple{Vararg{ChunkVector}}, cr::SubRanges) where N
+function process_index(i::AbstractArray{Bool,N}, chunks::Tuple{Vararg{ChunkVector}}, cr::SubRanges) where {N}
     process_index(findall(i), chunks, cr)
 end
 function process_index(i::StepRange{<:Integer}, chunks::Tuple{Vararg{ChunkVector}}, ::ChunkRead{CanStepRange})

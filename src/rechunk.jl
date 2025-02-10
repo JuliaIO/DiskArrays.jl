@@ -24,7 +24,7 @@ eachchunk(A::RechunkedDiskArray) = A.chunks
 
 # These could be more efficient with memory in some cases, but this is simple
 readblock!(A::RechunkedDiskArray, data, I...) = _readblock_rechunked(A, data, I...)
-readblock!(A::RechunkedDiskArray, data, I::AbstractVector...) = 
+readblock!(A::RechunkedDiskArray, data, I::AbstractVector...) =
     _readblock_rechunked(A, data, I...)
 writeblock!(A::RechunkedDiskArray, data, I...) = writeblock!(parent(A), data, I...)
 

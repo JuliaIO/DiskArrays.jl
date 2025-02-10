@@ -109,7 +109,7 @@ function subsetchunks(chunks::RegularChunks, subsets::AbstractRange)
     end
 end
 
-findchunk(chunks::RegularChunks, i::Int) = 
+findchunk(chunks::RegularChunks, i::Int) =
     div(i + chunks.offset - 1, chunks.chunksize) + 1
 
 approx_chunksize(r::RegularChunks) = r.chunksize
@@ -124,9 +124,9 @@ Defines chunks along a dimension where chunk sizes are not constant but arbitrar
 struct IrregularChunks <: ChunkVector
     offsets::Vector{Int}
     function IrregularChunks(offsets::Vector{Int})
-        first(offsets) == 0 || 
+        first(offsets) == 0 ||
             throw(ArgumentError("First Offset of an Irregularchunk must be 0"))
-        all(i -> offsets[i] < offsets[i + 1], 1:(length(offsets) - 1)) || 
+        all(i -> offsets[i] < offsets[i+1], 1:(length(offsets)-1)) ||
             throw(ArgumentError("Offsets of an Irregularchunk must be strictly ordered"))
         return new(offsets)
     end
@@ -144,7 +144,7 @@ end
 
 Base.@propagate_inbounds function Base.getindex(chunks::IrregularChunks, i::Int)
     @boundscheck checkbounds(chunks, i)
-    return (chunks.offsets[i] + 1):chunks.offsets[i + 1]
+    return (chunks.offsets[i]+1):chunks.offsets[i+1]
 end
 Base.size(chunks::IrregularChunks) = (length(chunks.offsets) - 1,)
 
@@ -155,14 +155,14 @@ end
 function subsetchunks(chunks::IrregularChunks, subsets::UnitRange)
     c1 = findchunk(chunks, first(subsets))
     c2 = findchunk(chunks, last(subsets))
-    newoffsets = chunks.offsets[c1:(c2 + 1)]
+    newoffsets = chunks.offsets[c1:(c2+1)]
     firstoffset = first(subsets) - chunks.offsets[c1] - 1
     newoffsets[end] = last(subsets)
     newoffsets[2:end] .= newoffsets[2:end] .- firstoffset
     newoffsets .= newoffsets .- first(newoffsets)
     return IrregularChunks(newoffsets)
 end
-findchunk(chunks::IrregularChunks, i::Int) = 
+findchunk(chunks::IrregularChunks, i::Int) =
     searchsortedfirst(chunks.offsets, i) - 1
 approx_chunksize(chunks::IrregularChunks) =
     round(Int, sum(diff(chunks.offsets)) / (length(chunks.offsets) - 1))
@@ -235,9 +235,9 @@ function chunktype_from_chunksizes(chunksizes::AbstractVector)
         # Two affected chunks
         chunksize = max(chunksizes[1], chunksizes[2])
         return RegularChunks(chunksize, chunksize - chunksizes[1], sum(chunksizes))
-    elseif all(==(chunksizes[2]), view(chunksizes, (2):(length(chunksizes) - 1))) &&
-            chunksizes[end] <= chunksizes[2] &&
-            chunksizes[1] <= chunksizes[2]
+    elseif all(==(chunksizes[2]), view(chunksizes, (2):(length(chunksizes)-1))) &&
+           chunksizes[end] <= chunksizes[2] &&
+           chunksizes[1] <= chunksizes[2]
         # All chunks have the same size, only first and last chunk can be shorter
         chunksize = chunksizes[2]
         return RegularChunks(chunksize, chunksize - chunksizes[1], sum(chunksizes))
@@ -418,7 +418,7 @@ function estimate_chunksize(size, elsize)
         elseif idim > ii
             return 1
         else
-            sizebefore = idim == 1 ? 1 : prod(size[1:(idim - 1)])
+            sizebefore = idim == 1 ? 1 : prod(size[1:(idim-1)])
             return floor(Int, default_chunk_size[] * 1e6 / elsize / sizebefore)
         end
     end
