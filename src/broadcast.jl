@@ -52,19 +52,24 @@ function eachchunk(a::BroadcastDiskArray)
 end
 function common_chunks(s, args...)
     N = length(s)
-    chunkedars = filter(i -> haschunks(i) === Chunked(), collect(args))
-    all(ar -> isa(eachchunk(ar), GridChunks), chunkedars) ||
+    chunkedarrays = reduce(args; init=()) do acc, x
+        haschunks(x) === Chunked() ? (acc..., x) : acc
+    end
+    all(ar -> isa(eachchunk(ar), GridChunks), chunkedarrays) ||
         error("Currently only chunks of type GridChunks can be merged by broadcast")
-    if isempty(chunkedars)
+    if isempty(chunkedarrays)
         totalsize = sum(sizeof ∘ eltype, args)
         return estimate_chunksize(s, totalsize)
+    elseif length(chunkedarrays) == 1
+        return eachchunk(only(chunkedarrays))
     else
-        allcs = eachchunk.(chunkedars)
+        allchunks = collect(map(eachchunk, chunkedarrays))
         tt = ntuple(N) do n
-            csnow = filter(allcs) do cs
-                ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
+            csnow = filter(allchunks) do cs
+            ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
             end
             isempty(csnow) && return RegularChunks(1, 0, s[n])
+            
             cs = first(csnow).chunks[n]
             if all(s -> s.chunks[n] == cs, csnow)
                 return cs
