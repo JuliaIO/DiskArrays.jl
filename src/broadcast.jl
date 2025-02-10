@@ -108,7 +108,7 @@ function merge_chunks(csnow, n)
         # Update positions in each list of chunks
         chpos = newchpos .+ 1
         # If this is the last chunk, break
-        chpos[1] >= length(firstcs) && break
+        chpos[1] > length(firstcs) && break
         # Add our new offset
         push!(chunk_offsets, newchunkoffset)
     end
