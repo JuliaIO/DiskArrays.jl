@@ -88,7 +88,7 @@ function Base.:(==)(r1::RegularChunks, r2::RegularChunks)
         # For longer RegularChunks the offsets and chunk sizes 
         # must match for the chunks to be the same. 
         # So we compare them directly rather than iterating all of the ranges
-        return r1.cs == r2.cs && r1.offset == r2.offset
+        return r1.chunksize == r2.chunksize && r1.offset == r2.offset
     elseif nchunks == 2
         # Smaller RegularChunks can match with different chunk sizes and offsets
         # So we compare the ranges
