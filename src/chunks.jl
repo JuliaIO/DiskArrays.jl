@@ -77,6 +77,28 @@ Base.@propagate_inbounds function Base.getindex(r::RegularChunks, i::Int)
 end
 Base.size(r::RegularChunks, _) = div(r.arraysize + r.offset - 1, r.chunksize) + 1
 Base.size(r::RegularChunks) = (size(r, 1),)
+function Base.:(==)(r1::RegularChunks, r2::RegularChunks)
+    # The axis sizes must always match
+    r1.s == r2.s || return false
+    # The number of chunks must also match
+    nchunks = length(r1)
+    nchunks == length(r2) || return false
+    # But after that we need to take the number of chunks into account
+    if nchunks > 2 
+        # For longer RegularChunks the offsets and chunk sizes 
+        # must match for the chunks to be the same. 
+        # So we compare them directly rather than iterating all of the ranges
+        return r1.cs == r2.cs && r1.offset == r2.offset
+    elseif nchunks == 2
+        # Smaller RegularChunks can match with different chunk sizes and offsets
+        # So we compare the ranges
+        return first(r1) == first(r2) && last(r1) == last(r2)
+    elseif nchunks == 1
+        return first(r1) == first(r2)
+    else
+        return true
+    end
+end
 
 # DiskArrays interface
 
@@ -146,11 +168,12 @@ Base.@propagate_inbounds function Base.getindex(chunks::IrregularChunks, i::Int)
     @boundscheck checkbounds(chunks, i)
     return (chunks.offsets[i]+1):chunks.offsets[i+1]
 end
+  
 Base.size(chunks::IrregularChunks) = (length(chunks.offsets) - 1,)
-
-function Base.show(io::IO, chunks::IrregularChunks)
+Base.:(==)(c1::IrregularChunks, c2::IrregularChunks) =
+    c1 === c2 || c1.offsets == c2.offsets
+Base.show(io::IO, chunks::IrregularChunks) =
     Base.print(io, "IrregularChunks($(chunks.offsets))")
-end
 
 function subsetchunks(chunks::IrregularChunks, subsets::UnitRange)
     c1 = findchunk(chunks, first(subsets))

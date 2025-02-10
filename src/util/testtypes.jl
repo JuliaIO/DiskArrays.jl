@@ -29,7 +29,7 @@ Base.size(a::AccessCountDiskArray) = size(a.parent)
 
 # Apply the all in one macro rather than inheriting
 
-DiskArrays.haschunks(::AccessCountDiskArray) = DiskArrays.Chunked()
+DiskArrays.haschunks(a::AccessCountDiskArray) = DiskArrays.Chunked(a.batchstrategy)
 DiskArrays.eachchunk(a::AccessCountDiskArray) = DiskArrays.GridChunks(a, a.chunksize)
 function DiskArrays.readblock!(a::AccessCountDiskArray, aout, i::OrdinalRange...)
     ndims(a) == length(i) || error("Number of indices is not correct")
