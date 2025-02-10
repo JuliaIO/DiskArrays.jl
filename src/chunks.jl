@@ -79,7 +79,7 @@ Base.size(r::RegularChunks, _) = div(r.arraysize + r.offset - 1, r.chunksize) + 
 Base.size(r::RegularChunks) = (size(r, 1),)
 function Base.:(==)(r1::RegularChunks, r2::RegularChunks)
     # The axis sizes must always match
-    r1.s == r2.s || return false
+    r1.arraysize == r2.arraysize || return false
     # The number of chunks must also match
     nchunks = length(r1)
     nchunks == length(r2) || return false
