@@ -3,7 +3,7 @@ macro implement_show(t)
     t = esc(t)
     quote
         Base.show(io::IO, mime::MIME"text/plain", A::$t) = _show(io, mime, A)
-        Base.show(io::IO, A::$t) = _show(io, A) 
+        Base.show(io::IO, A::$t) = _show(io, A)
     end
 end
 
@@ -16,10 +16,10 @@ function _show(io, _, A)
     if haschunks(A) isa Chunked
         print(io, ": (\n")
         foreach(eachchunk(A).chunks) do c
-            print(io,"    ")
-            show(IOContext(io,:compact => true), length.(c))
-            print(io,"\n")
+            print(io, "    ")
+            show(IOContext(io, :compact => true), length.(c))
+            print(io, "\n")
         end
-        println(io,")")
+        println(io, ")")
     end
 end

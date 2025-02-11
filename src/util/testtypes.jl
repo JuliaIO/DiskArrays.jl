@@ -3,7 +3,7 @@ module TestTypes
 import ..DiskArrays
 
 export AccessCountDiskArray, ChunkedDiskArray, UnchunkedDiskArray, getindex_count, setindex_count, trueparent,
-  getindex_log, setindex_log
+    getindex_log, setindex_log
 
 """
     AccessCountDiskArray(A; chunksize)
@@ -22,19 +22,19 @@ struct AccessCountDiskArray{T,N,A<:AbstractArray{T,N},RS} <: DiskArrays.Abstract
     batchstrategy::RS
 end
 DiskArrays.batchstrategy(a::AccessCountDiskArray) = a.batchstrategy
-AccessCountDiskArray(a; chunksize=size(a),batchstrategy=DiskArrays.ChunkRead(DiskArrays.NoStepRange(),0.5)) = 
-  AccessCountDiskArray([], [], a, chunksize,batchstrategy)
+AccessCountDiskArray(a; chunksize=size(a), batchstrategy=DiskArrays.ChunkRead(DiskArrays.NoStepRange(), 0.5)) =
+    AccessCountDiskArray([], [], a, chunksize, batchstrategy)
 
 Base.size(a::AccessCountDiskArray) = size(a.parent)
 
 # Apply the all in one macro rather than inheriting
 
-DiskArrays.haschunks(::AccessCountDiskArray) = DiskArrays.Chunked()
+DiskArrays.haschunks(a::AccessCountDiskArray) = DiskArrays.Chunked(a.batchstrategy)
 DiskArrays.eachchunk(a::AccessCountDiskArray) = DiskArrays.GridChunks(a, a.chunksize)
 function DiskArrays.readblock!(a::AccessCountDiskArray, aout, i::OrdinalRange...)
     ndims(a) == length(i) || error("Number of indices is not correct")
     foreach(i) do r
-        isa(r,AbstractUnitRange) || DiskArrays.allow_steprange(a) || error("StepRange passed although trait is false")
+        isa(r, AbstractUnitRange) || DiskArrays.allow_steprange(a) || error("StepRange passed although trait is false")
     end
     # println("reading from indices ", join(string.(i)," "))
     push!(a.getindex_log, i)
@@ -42,8 +42,8 @@ function DiskArrays.readblock!(a::AccessCountDiskArray, aout, i::OrdinalRange...
 end
 function DiskArrays.writeblock!(a::AccessCountDiskArray, v, i::OrdinalRange...)
     ndims(a) == length(i) || error("Number of indices is not correct")
-    foreach(i) do r  
-        isa(r,AbstractUnitRange) || DiskArrays.allow_steprange(a) || error("StepRange passed although trait is false")
+    foreach(i) do r
+        isa(r, AbstractUnitRange) || DiskArrays.allow_steprange(a) || error("StepRange passed although trait is false")
     end
     # println("Writing to indices ", join(string.(i)," "))
     push!(a.setindex_log, i)

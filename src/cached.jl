@@ -1,10 +1,34 @@
 import Mmap
-# Force disk any abstractarray into a different chunking pattern.
-# This is useful in `zip` and other operations that can iterate
-# over multiple arrays with different patterns.
 
 """
-    CachedDiskArray <: AbstractDiskArray
+    ChunkTiledDiskArray <: AbstractDiskArray
+
+And abstract supertype for disk arrays that have fast indexing
+of tiled chunks already stored as separate arrays, such as [`CachedDiskArray`](@ref).
+"""
+abstract type ChunkTiledDiskArray{T,N} <: AbstractDiskArray{T,N} end
+
+Base.size(a::ChunkTiledDiskArray) = arraysize_from_chunksize.(eachchunk(a).chunks)
+
+function readblock!(A::ChunkTiledDiskArray{T,N}, data, I...) where {T,N}
+    chunks = eachchunk(A)
+    chunk_indices = findchunk.(chunks.chunks, I)
+    data_offset = OffsetArray(data, map(i -> first(i) - 1, I)...)
+    foreach(CartesianIndices(chunk_indices)) do ci
+        chunkindex = ChunkIndex(ci; offset=true)
+        chunk = A[chunkindex]
+        # Find the overlapping indices
+        inner_indices = map(axes(chunk), axes(data_offset)) do ax1, ax2
+            max(first(ax1), first(ax2)):min(last(ax1), last(ax2))
+        end
+        for ii in CartesianIndices(inner_indices)
+            data_offset[ii] = chunk[ii]
+        end
+    end
+end
+
+"""
+    CachedDiskArray <: ChunkTiledDiskArray
 
     CachedDiskArray(A::AbstractArray; maxsize=1000, mmap=false)
 
@@ -13,6 +37,8 @@ keep chunks up to a total of `maxsize` megabytes, dropping
 the least used chunks when `maxsize` is exceeded. If `mmap` is
 set to `true`, cached chunks will not be kept in RAM but Mmapped 
 to temproray files.  
+
+Can also be called with `cache`, which can be extended for wrapper array types.
 """
 struct CachedDiskArray{T,N,A<:AbstractArray{T,N},C} <: ChunkTiledDiskArray{T,N}
     parent::A
@@ -31,20 +57,30 @@ Base.size(A::CachedDiskArray) = size(parent(A))
 
 haschunks(A::CachedDiskArray) = haschunks(parent(A))
 eachchunk(A::CachedDiskArray) = eachchunk(parent(A))
-function getchunk(A::CachedDiskArray, i::ChunkIndex)
+
+# OffsetChunks return an OffsetArray, OneBasedChunks an Array
+Base.getindex(A::CachedDiskArray, i::ChunkIndex{N,OffsetChunks}) where {N} = 
+    _getchunk(A, i)
+Base.getindex(A::CachedDiskArray, i::ChunkIndex{N,OneBasedChunks}) where {N} = 
+    parent(_getchunk(A, i))
+
+function _getchunk(A::CachedDiskArray, i::ChunkIndex)
     get!(A.cache, i) do
         inds = eachchunk(A)[i.I]
         chunk = parent(A)[inds...]
         if A.mmap
-            mmappedarray = Mmap.mmap(tempname(),Array{eltype(chunk),ndims(chunk)},size(chunk),shared=false)
+            mmappedarray = Mmap.mmap(
+                tempname(), 
+                Array{eltype(chunk),ndims(chunk)}, 
+                size(chunk); 
+                shared=false
+            )
             copyto!(mmappedarray, chunk)
             chunk = mmappedarray
         end
         wrapchunk(chunk, inds)
     end
 end
-Base.getindex(A::CachedDiskArray, i::ChunkIndex{N,OffsetChunks}) where {N} = getchunk(A, i)
-Base.getindex(A::CachedDiskArray, i::ChunkIndex{N,OneBasedChunks}) where {N} = parent(getchunk(A, i))
 
 
 """
@@ -56,3 +92,4 @@ This function is intended to be extended by package that want to
 re-wrap the disk array afterwards, such as YAXArrays.jl or Rasters.jl.
 """
 cache(A::AbstractArray; maxsize=1000, mmap=false) = CachedDiskArray(A; maxsize, mmap)
+
