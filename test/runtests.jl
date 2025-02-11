@@ -119,6 +119,9 @@ function test_view(a)
     @test trueparent(a)[2:3, 3:4] == [4 4; 4 4]
     @test getindex_count(a) == 2
     @test setindex_count(a) == 2
+
+    v2 = view(a, 2:3, 2:4, Int[])
+    @test isempty(eachchunk(a))
 end
 
 function test_reductions(af)
@@ -204,10 +207,12 @@ end
     @test a1[3] == 9:10
     @test length(a1) == 3
     @test size(a1) == (3,)
-    v1 = subsetchunks(a1, 1:10)
-    v2 = subsetchunks(a1, 4:9)
-    @test v1 === a1
-    @test v2 === RegularChunks(5, 0, 6)
+    @test subsetchunks(a1, 1:10) === a1
+    @test subsetchunks(a1, 4:9) === RegularChunks(5, 0, 6)
+    @test subsetchunks(a1, Int[]) === RegularChunks(1, 0, 0)
+    @test subsetchunks(a1, 5:4) === RegularChunks(1, 0, 0)
+    @test subsetchunks(a1, 2:2:8) === RegularChunks(3, 2, 4)
+    @test subsetchunks(a1, 10:-2:1) === RegularChunks(3, 2, 5)
     a2 = RegularChunks(2, 0, 20)
     @test a2[1] == 1:2
     @test a2[2] == 3:4
@@ -232,6 +237,10 @@ end
     @test_throws BoundsError b1[6]
     @test subsetchunks(b1, 1:15) == IrregularChunks(; chunksizes=[3, 3, 4, 3, 2])
     @test subsetchunks(b1, 3:10) == IrregularChunks(; chunksizes=[1, 3, 4])
+    @test subsetchunks(b1, Int[]) == IrregularChunks(; chunksizes=Int[])
+    @test subsetchunks(b1, 5:4) == IrregularChunks(; chunksizes=Int[])
+    @test subsetchunks(b1, 2:2:15) == IrregularChunks(; chunksizes=[1, 2, 2, 1, 1])
+    @test subsetchunks(b1, 14:-2:1) == IrregularChunks(; chunksizes=[1, 1, 2, 2, 1])
     gridc = GridChunks(a1, a2, b1)
     @test eltype(gridc) <: Tuple{UnitRange,UnitRange,UnitRange}
     @test gridc[1, 1, 1] == (1:3, 1:2, 1:3)
