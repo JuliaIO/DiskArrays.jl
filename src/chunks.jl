@@ -20,6 +20,9 @@ function subsetchunks_fallback(chunks::ChunkVector, subsets)
     # This is a fallback method that should work for Regular and Irregular chunks.
     # Assuming the desired subset is sorted, we simply compute the chunk for every element 
     # in subs and collect everything together again in either a Regular or IrregularChunk
+    if isempty(subsets)
+        return RegularChunks(1, 0, 0)
+    end
     rev = if issorted(subsets)
         false
     elseif issorted(subsets; rev=true)
@@ -108,7 +111,7 @@ function subsetchunks(chunks::RegularChunks, subsets::AbstractUnitRange)
     chunks = RegularChunks(chunks.chunksize, newoffset, newsize)
     # In case the new chunk is trivial and has length 1, we shorten the chunk size
     if length(chunks) == 1
-        chunks = RegularChunks(newsize, 0, newsize)
+        chunks = RegularChunks(max(newsize, 1), 0, newsize)
     end
     return chunks
 end
@@ -176,6 +179,9 @@ Base.show(io::IO, chunks::IrregularChunks) =
     Base.print(io, "IrregularChunks($(chunks.offsets))")
 
 function subsetchunks(chunks::IrregularChunks, subsets::UnitRange)
+    if isempty(subsets)
+        return IrregularChunks([0])
+    end
     c1 = findchunk(chunks, first(subsets))
     c2 = findchunk(chunks, last(subsets))
     newoffsets = chunks.offsets[c1:(c2+1)]
@@ -253,7 +259,7 @@ end
 function chunktype_from_chunksizes(chunksizes::AbstractVector)
     if length(chunksizes) == 1
         # only a single chunk is affected
-        return RegularChunks(chunksizes[1], 0, chunksizes[1])
+        return RegularChunks(max(chunksizes[1], 1), 0, chunksizes[1])
     elseif length(chunksizes) == 2
         # Two affected chunks
         chunksize = max(chunksizes[1], chunksizes[2])
