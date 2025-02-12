@@ -121,7 +121,7 @@ function test_view(a)
     @test setindex_count(a) == 2
 
     v2 = view(a, 2:3, 2:4, Int[])
-    @test isempty(eachchunk(a))
+    @test size(eachchunk(v2)) == (1, 1, 0)
 end
 
 function test_reductions(af)
