@@ -368,8 +368,10 @@ import Statistics: mean
 end
 
 @testset "Broadcast" begin
-    a_disk1 = AccessCountDiskArray(rand(10, 9, 2); chunksize=(5, 3, 2))
-    test_broadcast(a_disk1)
+    for batchstrategy in (DiskArrays.ChunkRead(), DiskArrays.SubRanges())
+        a_disk1 = AccessCountDiskArray(rand(10, 9, 2); chunksize=(5, 3, 2), batchstrategy)
+        test_broadcast(a_disk1)
+    end
 end
 
 @testset "zip" begin

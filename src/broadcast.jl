@@ -57,7 +57,7 @@ end
 function common_chunks(s, args...)
     N = length(s)
     chunkedarrays = reduce(args; init=()) do acc, x
-        haschunks(x) === Chunked() ? (acc..., x) : acc
+        haschunks(x) isa Chunked ? (acc..., x) : acc
     end
     all(ar -> isa(eachchunk(ar), GridChunks), chunkedarrays) ||
         error("Currently only chunks of type GridChunks can be merged by broadcast")
