@@ -140,7 +140,7 @@ mergechunks(a::ChunkVector, b::ChunkVector) = mergechunks_irregular(a, b)
 mergechunks_irregular(a, b) =
     IrregularChunks(; chunksizes=filter(!iszero, [length.(a); length.(b)]))
 
-function cat_disk(dims, As::AbstractArray...)
+function cat_disk(dims, As::AbstractVector{<: AbstractArray})
     if length(dims) == 1
         dims = only(dims)
         cat_disk(dims, As...)
@@ -148,7 +148,7 @@ function cat_disk(dims, As::AbstractArray...)
         throw(ArgumentError("Block concatenation is not yet implemented for DiskArrays."))
     end
 end
-function cat_disk(dims::Int, As::AbstractArray...)
+function cat_disk(dims::Int, As::AbstractVector{<: AbstractArray})
     sz = map(ntuple(identity, dims)) do i
         i == dims ? length(As) : 1
     end
@@ -166,20 +166,20 @@ macro implement_cat(t)
         # the macro makes this kind of impossible to avoid dispatch problems
         Base.cat(A1::$t, As::AbstractArray...; dims) = cat_disk(dims, A1, As...)
         function Base.cat(A1::AbstractArray, A2::$t, As::AbstractArray...; dims)
-            return cat_disk(dims, A1, A2, As...)
+            return cat_disk(dims, [A1, A2, As...])
         end
         function Base.cat(A1::$t, A2::$t, As::AbstractArray...; dims)
-            return cat_disk(dims, A1, A2, As...)
+            return cat_disk(dims, [A1, A2, As...])
         end
         function Base.vcat(
             A1::Union{$t{<:Any,1},$t{<:Any,2}}, As::Union{$t{<:Any,1},$t{<:Any,2}}...
         )
-            return cat_disk(1, A1, As...)
+            return cat_disk(1, [A1, As...])
         end
         function Base.hcat(
             A1::Union{$t{<:Any,1},$t{<:Any,2}}, As::Union{$t{<:Any,1},$t{<:Any,2}}...
         )
-            return cat_disk(2, A1, As...)
+            return cat_disk(2, [A1, As...])
         end
     end
 end
