@@ -999,6 +999,15 @@ end
         pa1 = DiskArrays.pad(ch, ((201, 147), (390, 33), (1, 2)); fill=1)
         @test sum(pa1) == prod(size(pa1)) + sum(ch) - prod(size(ch))
     end
+    @testset "_pad_offset" begin
+        c1 = DiskArrays.RegularChunks(10, 0, 100)
+        DiskArrays._pad_offset(c1, (5, 2)) == DiskArrays.RegularChunks(10, 5, 107)
+        DiskArrays._pad_offset(c1, (30, 2)) == DiskArrays.RegularChunks(10, 0, 132)
+
+        c2 = DiskArrays.IrregularChunks(chunksizes = [10, 10, 20, 30, 40])
+        #The following test would assume padding ends up in a separate chunk:
+        @test DiskArrays._pad_offset(c2, (5, 5)) == DiskArrays.IrregularChunks(chunksizes = [5, 10, 10, 20, 30, 40, 5])
+    end
 end
 
 @testset "Range subset identification" begin

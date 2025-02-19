@@ -28,27 +28,31 @@ function PaddedDiskArray(A::AbstractArray{T,N}, padding::NTuple{N,Tuple{Int,Int}
     map(padding) do (l, u)
         (l < 0 || u < 0) && throw(ArgumentError("Padding must be non-negative"))
     end
-    chunks = GridChunks(map(_pad_offset, eachchunk(A).chunks, padding, size(A)))
+    chunks = GridChunks(map(_pad_offset, eachchunk(A).chunks, padding))
     PaddedDiskArray(A, padding, fill, chunks)
 end
 
-function _pad_offset(c::RegularChunks, (low, high), s)
+function _pad_offset(c::RegularChunks, (low, high))
     chunksize = c.chunksize
     # Handle lower padding larger than chunksize
-    offset = c.offset - low + chunksize * (div(low, chunksize) + 1)
+    offset = c.offset - low + chunksize * (div(low - 1, chunksize) + 1)
     size = c.arraysize + low + high
     return RegularChunks(chunksize, offset, size)
 end
-function _pad_offset(c::IrregularChunks, (low, high), s)
-    offsets = Vector{Int}(undef, length(c.offsets) + 1)
+function _pad_offset(c::IrregularChunks, (low, high))
+    nlowchunks = Int(low > 0) 
+    nhighchunks = Int(high > 0)
+    offsets = Vector{Int}(undef, length(c.offsets) + nlowchunks + nhighchunks)
     # First offset is always zero
     offsets[begin] = 0
     # Increase original offsets by lower padding
     for (i, o) in enumerate(c.offsets)
-        offsets[i + 1] = o + low
+        offsets[i + nlowchunks] = o + low
     end
     # Add offset for start of upper padding
-    offsets[end] = s + low
+    if nhighchunks > 0
+        offsets[end] = offsets[end-1] + high
+    end
     return IrregularChunks(offsets)
 end
 
