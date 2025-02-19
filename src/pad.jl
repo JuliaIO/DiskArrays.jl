@@ -25,14 +25,18 @@ end
 function PaddedDiskArray(A::AbstractArray{T,N}, padding::NTuple{N,Tuple{Int,Int}};
     fill=zero(eltype(A)),
 ) where {T,N}
+    map(padding) do (l, u)
+        (l < 0 || u < 0) && throw(ArgumentError("Padding must be non-negative"))
+    end
     chunks = GridChunks(map(_pad_offset, eachchunk(A).chunks, padding, size(A)))
     PaddedDiskArray(A, padding, fill, chunks)
 end
 
 function _pad_offset(c::RegularChunks, (low, high), s)
-    chunksize = c.cs
-    offset = low > 0 ? c.offset - low + chunksize : c.offset
-    size = c.s + low + high
+    chunksize = c.chunksize
+    # Handle lower padding larger than chunksize
+    offset = c.offset - low + chunksize * (div(low, chunksize) + 1)
+    size = c.arraysize + low + high
     return RegularChunks(chunksize, offset, size)
 end
 function _pad_offset(c::IrregularChunks, (low, high), s)
@@ -55,15 +59,15 @@ function Base.size(A::PaddedDiskArray)
     end
 end
 
-readblock!(A::PaddedDiskArray, data, I...) = _readblock_padded!(A, data, I...)
-readblock!(A::PaddedDiskArray, data, I::AbstractVector...) =
-    _readblock_padded(A, data, I...)
-writeblock!(A::PaddedDiskArray, data, I...) = 
-    throw(ArgumentError("Cannot write to a PaddedDiskArray"))
 haschunks(A::PaddedDiskArray) = haschunks(parent(A))
 eachchunk(A::PaddedDiskArray) = A.chunks
 
-function _readblock_padded(A, data, I...)
+readblock!(A::PaddedDiskArray, data, I::AbstractRange...) =
+    _readblock_padded(A, data, I...)
+writeblock!(A::PaddedDiskArray, data, I...) = 
+    throw(ArgumentError("Cannot write to a PaddedDiskArray"))
+
+function _readblock_padded(A, data, I::AbstractRange...)
     data .= A.fill
     Ipadded = map(I, A.padding) do i, (low, high)
         i .- low
@@ -77,7 +81,6 @@ function _readblock_padded(A, data, I...)
     return if all(map(<=, fs, ls))
         Idata = map(:, fs, ls)
         Iparent = map(getindex, Ipadded, Idata)
-        @show Idata Iparent
         readblock!(parent(A), view(data, Idata...), Iparent...)
     else
         # No overlap, don't read
