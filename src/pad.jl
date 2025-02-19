@@ -35,7 +35,11 @@ end
 function _pad_offset(c::RegularChunks, (low, high))
     chunksize = c.chunksize
     # Handle lower padding larger than chunksize
-    offset = c.offset - low + chunksize * (div(low - 1, chunksize) + 1)
+    offset = if low == 0
+        c.offset
+    else
+        c.offset - low + chunksize * (div(low - 1, chunksize) + 1)
+    end
     size = c.arraysize + low + high
     return RegularChunks(chunksize, offset, size)
 end

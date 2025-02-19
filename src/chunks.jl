@@ -61,7 +61,7 @@ struct RegularChunks <: ChunkVector
     arraysize::Int
     function RegularChunks(chunksize::Integer, offset::Integer, arraysize::Integer)
         chunksize > 0 || throw(ArgumentError("Chunk sizes must be strictly positive"))
-        -1 < offset < chunksize || throw(ArgumentError("Offsets must be positive and smaller than the chunk size"))
+        -1 < offset < chunksize || throw(ArgumentError("Offsets must be positive and smaller than the chunk size, got offset: $offset and chunk size: $chunksize"))
         arraysize >= 0 || throw(ArgumentError("Negative axis lengths are not allowed"))
         new(Int(chunksize), Int(offset), Int(arraysize))
     end
