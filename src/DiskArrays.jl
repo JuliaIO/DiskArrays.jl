@@ -12,7 +12,11 @@ end DiskArrays
 export AbstractDiskArray, eachchunk, ChunkIndex, ChunkIndices
 
 include("scalar.jl")
+include("chunks.jl")
 include("diskarray.jl")
+include("batchgetindex.jl")
+include("diskindex.jl")
+include("indexing.jl")
 include("array.jl")
 include("broadcast.jl")
 include("iterator.jl")
@@ -73,7 +77,7 @@ end
 # We need to skip the `implement_zip` macro for dispatch
 @implement_diskarray_skip_zip AbstractDiskArray
 
-#And we define the test types
+# And we define the test types
 include("util/testtypes.jl")
 
 

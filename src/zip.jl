@@ -1,24 +1,18 @@
 
+"""
+    DiskZip
+
+Replaces `Zip` for disk arrays, for calling `zip` on disk arrays.
+
+Reads out-of-order over chunks, but `collect`s to the correct order.
+Less flexible than `Base.Zip` as it can only zip with other `AbstractArray`.
+
+Note: currently only one of the first two arguments of `zip` must be a disk
+array to return `DiskZip`.
+"""
 struct DiskZip{Is<:Tuple}
     is::Is
 end
-Base.iterate(dz::DiskZip) = Base.iterate(Iterators.Zip(dz.is))
-Base.iterate(dz::DiskZip, i) = Base.iterate(Iterators.Zip(dz.is), i)
-Base.first(dz::DiskZip) = Base.first(Iterators.Zip(dz.is))
-Base.last(dz::DiskZip) = Base.last(Iterators.Zip(dz.is))
-Base.length(dz::DiskZip) = Base.length(Iterators.Zip(dz.is))
-Base.size(dz::DiskZip) = Base.size(Iterators.Zip(dz.is))
-function Base.IteratorSize(::Type{DiskZip{Is}}) where {Is<:Tuple}
-    return Base.IteratorSize(Iterators.Zip{Is})
-end
-function Base.IteratorEltype(::Type{DiskZip{Is}}) where {Is<:Tuple}
-    return Base.IteratorEltype(Iterators.Zip{Is})
-end
-
-# Rechunk using the chunks of the first Chunked array
-# This forces the iteration order to be the same for
-# all arrays.
-
 function DiskZip(As::AbstractArray...)
     map(As) do A
         size(A) == size(first(As)) ||
@@ -41,7 +35,21 @@ function DiskZip(As::AbstractArray...)
         return DiskZip(rechunked)
     end
 end
-# # For now we only allow zip on exact same-sized arrays
+
+Base.iterate(dz::DiskZip) = Base.iterate(Iterators.Zip(dz.is))
+Base.iterate(dz::DiskZip, i) = Base.iterate(Iterators.Zip(dz.is), i)
+Base.first(dz::DiskZip) = Base.first(Iterators.Zip(dz.is))
+Base.last(dz::DiskZip) = Base.last(Iterators.Zip(dz.is))
+Base.length(dz::DiskZip) = Base.length(Iterators.Zip(dz.is))
+Base.size(dz::DiskZip) = Base.size(Iterators.Zip(dz.is))
+function Base.IteratorSize(::Type{DiskZip{Is}}) where {Is<:Tuple}
+    return Base.IteratorSize(Iterators.Zip{Is})
+end
+function Base.IteratorEltype(::Type{DiskZip{Is}}) where {Is<:Tuple}
+    return Base.IteratorEltype(Iterators.Zip{Is})
+end
+
+# For now we only allow zip on exact same-sized arrays
 
 # Collect zipped disk arrays in the right order
 function Base.collect(dz::DiskZip)

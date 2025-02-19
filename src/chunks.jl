@@ -1,83 +1,244 @@
 """
-    eachchunk(a)
+    ChunkVector <: AbstractVector{UnitRange}
 
-Returns an iterator with `CartesianIndices` elements that mark the index range of each chunk within an array.
+Supertype for lazy vectors of `UnitRange`.
+
+[`RegularChunks`](@ref) and [`IrregularChunks`](@ref) 
+are the implementations.
 """
-function eachchunk end
+abstract type ChunkVector <: AbstractVector{UnitRange} end
 
-abstract type ChunkType <: AbstractVector{UnitRange} end
+findchunk(a::ChunkVector, i::AbstractUnitRange) =
+    (findchunk(a, first(i))::Int):(findchunk(a, last(i))::Int)
+findchunk(a::ChunkVector, ::Colon) = 1:length(a)
 
-function findchunk(a::ChunkType, i::AbstractUnitRange)
-    return (findchunk(a, first(i))::Int):(findchunk(a, last(i))::Int)
+# Identify chunks from indices which may be discontinuous.
+subsetchunks(chunks::ChunkVector, subs::BitVector) = subsetchunks(chunks, findall(subs))
+subsetchunks(chunks::ChunkVector, subsets) = subsetchunks_fallback(chunks, subsets)
+
+function subsetchunks_fallback(chunks::ChunkVector, subsets)
+    # This is a fallback method that should work for Regular and Irregular chunks.
+    # Assuming the desired subset is sorted, we simply compute the chunk for every element 
+    # in subs and collect everything together again in either a Regular or IrregularChunk
+    if isempty(subsets)
+        return RegularChunks(1, 0, 0)
+    end
+    rev = if issorted(subsets)
+        false
+    elseif issorted(subsets; rev=true)
+        true
+    else
+        runlength = chunk_runlength(chunks, subsets)
+        return chunktype_from_chunksizes(runlength)
+    end
+    chunksizes = zeros(Int, length(chunks))
+    for i in subsets
+        chunksizes[findchunk(chunks, i)] += 1
+    end
+    # Find first and last chunk where elements are extracted
+    i1 = findfirst(!iszero, chunksizes)
+    i2 = findlast(!iszero, chunksizes)
+    if isnothing(i1) || isnothing(i2)
+        error("Should not be reached. Non-zero indices not found")
+    else
+        newchunksizes = chunksizes[i1:i2]
+        if rev
+            reverse!(newchunksizes)
+        end
+        return chunktype_from_chunksizes(newchunksizes)
+    end
 end
-findchunk(a::ChunkType, ::Colon) = 1:length(a)
 
 """
-    RegularChunks <: ChunkType
+    RegularChunks <: ChunkArray
 
 Defines chunking along a dimension where the chunks have constant size and a potential
 offset for the first chunk. The last chunk is truncated to fit the array size. 
 """
-struct RegularChunks <: ChunkType
-    cs::Int
+struct RegularChunks <: ChunkVector
+    chunksize::Int
     offset::Int
-    s::Int
-    function RegularChunks(cs::Integer, offset::Integer, s::Integer)
-        cs>0 || throw(ArgumentError("Chunk sizes must be strictly positive"))
-        -1 < offset < cs || throw(ArgumentError("Offsets must be positive and smaller than the chunk size"))
-        s >= 0 || throw(ArgumentError("Negative dimension lengths are not allowed"))
-        new(Int(cs), Int(offset), Int(s))
+    arraysize::Int
+    function RegularChunks(chunksize::Integer, offset::Integer, arraysize::Integer)
+        chunksize > 0 || throw(ArgumentError("Chunk sizes must be strictly positive"))
+        -1 < offset < chunksize || throw(ArgumentError("Offsets must be positive and smaller than the chunk size"))
+        arraysize >= 0 || throw(ArgumentError("Negative axis lengths are not allowed"))
+        new(Int(chunksize), Int(offset), Int(arraysize))
     end
+end
+
+function Base.show(io::IO, chunks::RegularChunks)
+    (; chunksize, offset, arraysize) = chunks
+    Base.print(io, "RegularChunks($chunksize, $offset, $arraysize)")
 end
 
 # Base methods
 
-function Base.getindex(r::RegularChunks, i::Int)
+Base.@propagate_inbounds function Base.getindex(r::RegularChunks, i::Int)
     @boundscheck checkbounds(r, i)
-    return max((i - 1) * r.cs + 1 - r.offset, 1):min(i * r.cs - r.offset, r.s)
+    return max((i - 1) * r.chunksize + 1 - r.offset, 1):min(i * r.chunksize - r.offset, r.arraysize)
 end
-Base.size(r::RegularChunks, _) = div(r.s + r.offset - 1, r.cs) + 1
+Base.size(r::RegularChunks, _) = div(r.arraysize + r.offset - 1, r.chunksize) + 1
 Base.size(r::RegularChunks) = (size(r, 1),)
+function Base.:(==)(r1::RegularChunks, r2::RegularChunks)
+    # The axis sizes must always match
+    r1.arraysize == r2.arraysize || return false
+    # The number of chunks must also match
+    nchunks = length(r1)
+    nchunks == length(r2) || return false
+    # But after that we need to take the number of chunks into account
+    if nchunks > 2 
+        # For longer RegularChunks the offsets and chunk sizes 
+        # must match for the chunks to be the same. 
+        # So we compare them directly rather than iterating all of the ranges
+        return r1.chunksize == r2.chunksize && r1.offset == r2.offset
+    elseif nchunks == 2
+        # Smaller RegularChunks can match with different chunk sizes and offsets
+        # So we compare the ranges
+        return first(r1) == first(r2) && last(r1) == last(r2)
+    elseif nchunks == 1
+        return first(r1) == first(r2)
+    else
+        return true
+    end
+end
 
 # DiskArrays interface
 
-function subsetchunks(r::RegularChunks, subs::AbstractUnitRange)
-    snew = length(subs)
-    newoffset = mod(first(subs) - 1 + r.offset, r.cs)
-    r = RegularChunks(r.cs, newoffset, snew)
+function subsetchunks(chunks::RegularChunks, subsets::AbstractUnitRange)
+    newsize = length(subsets)
+    newoffset = mod(first(subsets) - 1 + chunks.offset, chunks.chunksize)
+    chunks = RegularChunks(chunks.chunksize, newoffset, newsize)
     # In case the new chunk is trivial and has length 1, we shorten the chunk size
-    if length(r) == 1
-        r = RegularChunks(snew, 0, snew)
+    if length(chunks) == 1
+        chunks = RegularChunks(max(newsize, 1), 0, newsize)
     end
-    return r
+    return chunks
 end
-
-function subsetchunks(r::RegularChunks, subs::AbstractRange)
-    if rem(r.cs, step(subs)) == 0
-        newcs = r.cs ÷ abs(step(subs))
-        if step(subs) > 0
-            newoffset = mod(first(subs) - 1 + r.offset, r.cs) ÷ step(subs)
-            return RegularChunks(newcs, newoffset, length(subs))
-        elseif step(subs) < 0
-            r2 = subsetchunks(r, last(subs):first(subs))::ChunkType
-            newoffset = (r.cs - length(last(r2))) ÷ (-step(subs))
-            return RegularChunks(newcs, newoffset, length(subs))
+# Need to handle step sizes for AbstractRange
+function subsetchunks(chunks::RegularChunks, subsets::AbstractRange)
+    # Check if the chunksize is divisible by the step size of the subsets range
+    if rem(chunks.chunksize, step(subsets)) == 0
+        # In which cas the chunk size is divided by the step size
+        newchunksize = chunks.chunksize ÷ abs(step(subsets))
+        if step(subsets) > 0
+            newoffset = mod(first(subsets) - 1 + chunks.offset, chunks.chunksize) ÷ step(subsets)
+            return RegularChunks(newchunksize, newoffset, length(subsets))
+        elseif step(subsets) < 0
+            chunks2 = subsetchunks(chunks, last(subsets):first(subsets))::ChunkVector
+            newoffset = (chunks.chunksize - length(last(chunks2))) ÷ (-step(subsets))
+            return RegularChunks(newchunksize, newoffset, length(subsets))
         end
     else
-        return subsetchunks_fallback(r, subs)
+        return subsetchunks_fallback(chunks, subsets)
     end
 end
-findchunk(r::RegularChunks, i::Int) = div(i + r.offset - 1, r.cs) + 1
 
-subsetchunks(r, subs) = subsetchunks_fallback(r, subs)
+findchunk(chunks::RegularChunks, i::Int) =
+    div(i + chunks.offset - 1, chunks.chunksize) + 1
+
+approx_chunksize(r::RegularChunks) = r.chunksize
+grid_offset(r::RegularChunks) = r.offset
+max_chunksize(r::RegularChunks) = r.chunksize
 
 """
-    chunk_rle(chunks,vec)
+    IrregularChunks <: ChunkVector
 
-Computes the run length of which chunk is accessed how many times consecutively to determine
+Defines chunks along a dimension where chunk sizes are not constant but arbitrary
+"""
+struct IrregularChunks <: ChunkVector
+    offsets::Vector{Int}
+    function IrregularChunks(offsets::Vector{Int})
+        first(offsets) == 0 ||
+            throw(ArgumentError("First Offset of an Irregularchunk must be 0"))
+        all(i -> offsets[i] < offsets[i+1], 1:(length(offsets)-1)) ||
+            throw(ArgumentError("Offsets of an Irregularchunk must be strictly ordered"))
+        return new(offsets)
+    end
+end
+"""
+    IrregularChunks(; chunksizes)
+
+Returns an IrregularChunks object for the given list of chunk sizes
+"""
+function IrregularChunks(; chunksizes)
+    offsets = pushfirst!(cumsum(chunksizes), 0)
+    # push!(offs, last(offs)+1)
+    return IrregularChunks(offsets)
+end
+
+Base.@propagate_inbounds function Base.getindex(chunks::IrregularChunks, i::Int)
+    @boundscheck checkbounds(chunks, i)
+    return (chunks.offsets[i]+1):chunks.offsets[i+1]
+end
+  
+Base.size(chunks::IrregularChunks) = (length(chunks.offsets) - 1,)
+Base.:(==)(c1::IrregularChunks, c2::IrregularChunks) =
+    c1 === c2 || c1.offsets == c2.offsets
+Base.show(io::IO, chunks::IrregularChunks) =
+    Base.print(io, "IrregularChunks($(chunks.offsets))")
+
+function subsetchunks(chunks::IrregularChunks, subsets::UnitRange)
+    if isempty(subsets)
+        return IrregularChunks([0])
+    end
+    c1 = findchunk(chunks, first(subsets))
+    c2 = findchunk(chunks, last(subsets))
+    newoffsets = chunks.offsets[c1:(c2+1)]
+    firstoffset = first(subsets) - chunks.offsets[c1] - 1
+    newoffsets[end] = last(subsets)
+    newoffsets[2:end] .= newoffsets[2:end] .- firstoffset
+    newoffsets .= newoffsets .- first(newoffsets)
+    return IrregularChunks(newoffsets)
+end
+findchunk(chunks::IrregularChunks, i::Int) =
+    searchsortedfirst(chunks.offsets, i) - 1
+approx_chunksize(chunks::IrregularChunks) =
+    round(Int, sum(diff(chunks.offsets)) / (length(chunks.offsets) - 1))
+grid_offset(chunks::IrregularChunks) = 0
+max_chunksize(chunks::IrregularChunks) = maximum(diff(chunks.offsets))
 
 """
-function chunk_rle(chunks, vec)
+    GridChunks
+
+Multi-dimensional chunk specification, that holds a chunk pattern 
+for each axis of an array. 
+
+These are usually `RegularChunks` or `IrregularChunks`.
+"""
+struct GridChunks{N,C<:Tuple{Vararg{ChunkVector,N}}} <:
+       AbstractArray{NTuple{N,UnitRange{Int64}},N}
+    chunks::C
+end
+GridChunks(chunks::ChunkVector...) = GridChunks(chunks)
+GridChunks(a, chunksize; kw...) = GridChunks(size(a), chunksize; kw...)
+function GridChunks(sizes::Tuple, chunksizes::Tuple; offset=(_ -> 0).(sizes))
+    chunks = map(RegularChunks, chunksizes, offset, sizes)
+    return GridChunks(chunks)
+end
+function Base.show(io::IO, gridchunks::GridChunks)
+    println(io, "GridChunks(")
+    map(gridchunks.chunks) do chunks
+        println("    ")
+        show(io, chunks)
+        print(",")
+    end
+    println(io, ")")
+end
+
+# Base methods
+
+Base.@propagate_inbounds function Base.getindex(gc::GridChunks{N}, i::Vararg{Int,N}) where {N}
+    @boundscheck checkbounds(gc, i...)
+    return map(getindex, gc.chunks, i)
+end
+Base.size(gc::GridChunks) = map(length, gc.chunks)
+Base.:(==)(gc1::GridChunks, gc2::GridChunks) = gc1.chunks == gc2.chunks
+
+# Utils
+
+# Computes the run length of which chunk is accessed how many times consecutively.
+function chunk_runlength(chunks::ChunkVector, vec)
     out = Int[]
     currentchunk = -1
     for i in vec
@@ -89,184 +250,75 @@ function chunk_rle(chunks, vec)
             currentchunk = nextchunk
         end
     end
-    out
+    return out
 end
 
-"""
-    subsetchunks(r, subs::BitVector)
-
-Identify chunks from indices which may be discontinuous.
-"""
-function subsetchunks(r, subs::BitVector)
-    return subsetchunks(r, findall(subs))
-end
-
-approx_chunksize(r::RegularChunks) = r.cs
-grid_offset(r::RegularChunks) = r.offset
-max_chunksize(r::RegularChunks) = r.cs
-
-"""
-    IrregularChunks <: ChunkType
-
-Defines chunks along a dimension where chunk sizes are not constant but arbitrary
-"""
-struct IrregularChunks <: ChunkType
-    offsets::Vector{Int}
-    function IrregularChunks(offsets::Vector{Int})
-        first(offsets)==0 || throw(ArgumentError("First Offset of an Irregularchunk must be 0"))
-        all(i->offsets[i]<offsets[i+1],1:(length(offsets)-1)) || throw(ArgumentError("Offsets of an Irregularchunk must be strictly ordered"))
-        new(offsets)
-    end
-end
-
-"""
-    IrregularChunks(; chunksizes)
-
-Returns an IrregularChunks object for the given list of chunk sizes
-"""
-function IrregularChunks(; chunksizes)
-    offs = pushfirst!(cumsum(chunksizes), 0)
-    # push!(offs, last(offs)+1)
-    return IrregularChunks(offs)
-end
-
-function Base.getindex(r::IrregularChunks, i::Int)
-    @boundscheck checkbounds(r, i)
-    return (r.offsets[i] + 1):r.offsets[i + 1]
-end
-Base.size(r::IrregularChunks) = (length(r.offsets) - 1,)
-function subsetchunks(r::IrregularChunks, subs::UnitRange)
-    c1 = findchunk(r, first(subs))
-    c2 = findchunk(r, last(subs))
-    offsnew = r.offsets[c1:(c2 + 1)]
-    firstoffset = first(subs) - r.offsets[c1] - 1
-    offsnew[end] = last(subs)
-    offsnew[2:end] .= offsnew[2:end] .- firstoffset
-    offsnew .= offsnew .- first(offsnew)
-    return IrregularChunks(offsnew)
-end
-findchunk(r::IrregularChunks, i::Int) = searchsortedfirst(r.offsets, i) - 1
-function approx_chunksize(r::IrregularChunks)
-    return round(Int, sum(diff(r.offsets)) / (length(r.offsets) - 1))
-end
-grid_offset(r::IrregularChunks) = 0
-max_chunksize(r::IrregularChunks) = maximum(diff(r.offsets))
-
-struct GridChunks{N,C<:Tuple{Vararg{ChunkType,N}}} <:
-       AbstractArray{NTuple{N,UnitRange{Int64}},N}
-    chunks::C
-end
-GridChunks(ct::ChunkType...) = GridChunks(ct)
-GridChunks(a, chunksize; offset=(_ -> 0).(size(a))) = GridChunks(size(a), chunksize; offset)
-function GridChunks(a::Tuple, chunksize; offset=(_ -> 0).(a))
-    gcs = map(a, chunksize, offset) do s, cs, of
-        RegularChunks(cs, of, s)
-    end
-    return GridChunks(gcs)
-end
-
-# Base methods
-
-function Base.getindex(g::GridChunks{N}, i::Vararg{Int,N}) where {N}
-    @boundscheck checkbounds(g, i...)
-    return getindex.(g.chunks, i)
-end
-Base.size(g::GridChunks) = length.(g.chunks)
-
-Base.:(==)(g1::GridChunks, g2::GridChunks) = g1.chunks == g2.chunks
-
-function subsetchunks_fallback(r, subs)
-    #This is a fallback method that should work for Regular and Irregular chunks r 
-    #Assuming the desired subset is sorted
-    # We simply compute the chunk for every element in subs and collect everything together 
-    #again in either a Regular or IrregularChunk
-    rev = if issorted(subs)
-        false
-    elseif issorted(subs; rev=true)
-        true
+# Utility function that constructs either a `RegularChunks` or an
+# `IrregularChunks` object based on a vector of chunk sizes given as worted Integers. Wherever
+# possible it will try to create a regular chunks object.  
+function chunktype_from_chunksizes(chunksizes::AbstractVector)
+    if length(chunksizes) == 1
+        # only a single chunk is affected
+        return RegularChunks(max(chunksizes[1], 1), 0, chunksizes[1])
+    elseif length(chunksizes) == 2
+        # Two affected chunks
+        chunksize = max(chunksizes[1], chunksizes[2])
+        return RegularChunks(chunksize, chunksize - chunksizes[1], sum(chunksizes))
+    elseif all(==(chunksizes[2]), view(chunksizes, (2):(length(chunksizes)-1))) &&
+           chunksizes[end] <= chunksizes[2] &&
+           chunksizes[1] <= chunksizes[2]
+        # All chunks have the same size, only first and last chunk can be shorter
+        chunksize = chunksizes[2]
+        return RegularChunks(chunksize, chunksize - chunksizes[1], sum(chunksizes))
     else
-        rle = chunk_rle(r, subs)
-        return chunktype_from_chunksizes(rle)
-    end
-    cs = zeros(Int, length(r))
-    for i in subs
-        cs[findchunk(r, i)] += 1
-    end
-    # Find first and last chunk where elements are extracted
-    i1 = findfirst(!iszero, cs)
-    i2 = findlast(!iszero, cs)
-    if isnothing(i1) || isnothing(i2)
-        error("Should not be reached. Non-zero indices not found")
-    else
-        chunks = cs[i1:i2]
-        if rev
-            reverse!(chunks)
-        end
-        return chunktype_from_chunksizes(chunks)
+        # Chunks are Irregular
+        return IrregularChunks(; chunksizes=filter(!iszero, chunksizes))
     end
 end
 
 """
-    chunktype_from_chunksizes(chunks)
-
-Utility function that constructs either a `RegularChunks` or an
-`IrregularChunks` object based on a vector of chunk sizes given as worted Integers. Wherever
-possible it will try to create a regular chunks object.  
-"""
-function chunktype_from_chunksizes(chunks)
-    if length(chunks) == 1
-        #only a single chunk is affected
-        return RegularChunks(chunks[1], 0, chunks[1])
-    elseif length(chunks) == 2
-        #Two affected chunks
-        chunksize = max(chunks[1], chunks[2])
-        return RegularChunks(chunksize, chunksize - chunks[1], sum(chunks))
-    elseif all(==(chunks[2]), view(chunks, (2):(length(chunks) - 1))) &&
-        chunks[end] <= chunks[2] &&
-        chunks[1] <= chunks[2]
-        #All chunks have the same size, only first and last chunk can be shorter
-        chunksize = chunks[2]
-        return RegularChunks(chunksize, chunksize - chunks[1], sum(chunks))
-    else
-        #Chunks are Irregular
-        return IrregularChunks(; chunksizes=filter(!iszero, chunks))
-    end
-end
-
-"""
-    arraysize_from_chunksize(g::ChunkType)
+    arraysize_from_chunksize(g::ChunkVector)
 
 Returns the size of the dimension represented by a chunk object. 
 """
-arraysize_from_chunksize(cs::DiskArrays.RegularChunks)=cs.s
-arraysize_from_chunksize(cs::DiskArrays.IrregularChunks)=last(cs.offsets)
+arraysize_from_chunksize(chunks::RegularChunks) = chunks.arraysize
+arraysize_from_chunksize(chunks::IrregularChunks) = last(chunks.offsets)
 
 # DiskArrays interface
 
 """
     approx_chunksize(g::GridChunks)
 
-Returns the aproximate chunk size of the grid. For the dimension with regular chunks, this will be the exact chunk size
-while for dimensions with irregular chunks this is the average chunks size. Useful for downstream applications that want to
+Returns the aproximate chunk size of the grid. 
+
+For the dimension with regular chunks, this will be the exact chunk size
+while for dimensions with irregular chunks this is the average chunks size. 
+
+Useful for downstream applications that want to
 distribute computations and want to know about chunk sizes. 
 """
-approx_chunksize(g::GridChunks) = approx_chunksize.(g.chunks)
+approx_chunksize(g::GridChunks) = map(approx_chunksize, g.chunks)
 
 """
     grid_offset(g::GridChunks)
 
-Returns the offset of the grid for the first chunks. Expect this value to be non-zero for views into regular-gridded
-arrays. Useful for downstream applications that want to distribute computations and want to know about chunk sizes. 
+Returns the offset of the grid for the first chunks. 
+
+Expect this value to be non-zero for views into regular-gridded arrays. 
+
+Useful for downstream applications that want to 
+distribute computations and want to know about chunk sizes. 
 """
-grid_offset(g::GridChunks) = grid_offset.(g.chunks)
+grid_offset(g::GridChunks) = map(grid_offset, g.chunks)
 
 """
     max_chunksize(g::GridChunks)
 
-Returns the maximum chunk size of an array for each dimension. Useful for pre-allocating arrays to make sure they can hold
-a chunk of data. 
+Returns the maximum chunk size of an array for each dimension. 
+
+Useful for pre-allocating arrays to make sure they can hold a chunk of data. 
 """
-max_chunksize(g::GridChunks) = max_chunksize.(g.chunks)
+max_chunksize(g::GridChunks) = map(max_chunksize, g.chunks)
 
 # Define the approx default maximum chunk size (in MB)
 "The target chunk size for processing for unchunked arrays in MB, defaults to 100MB"
@@ -278,64 +330,90 @@ size like strings. Defaults to 100MB
 """
 const fallback_element_size = Ref(100)
 
-# Here we implement a fallback chunking for a DiskArray although this should normally
-# be over-ridden by the package that implements the interface
 
-function eachchunk(a::AbstractArray)
-    return estimate_chunksize(a)
-end
+"""
+    ChunkedTrait{S}
 
-# Chunked trait
+Traits for disk array chunking. 
 
-struct Chunked{BS}
+[`Chunked`](@ref) or [`Unchunked`](@ref).
+
+Always hold a [`BatchStrategy`](@ref) trait.
+"""
+abstract type ChunkedTrait{BS} end
+
+batchstrategy(trait::ChunkedTrait) = trait.batchstrategy
+
+"""
+    Chunked{<:BatchStrategy}
+
+A trait that specifies an Array has a chunked read pattern.
+"""
+struct Chunked{BS} <: ChunkedTrait{BS}
     batchstrategy::BS
 end
 Chunked() = Chunked(ChunkRead())
-struct Unchunked{BS}
+
+"""
+    Unchunked{<:BatchStrategy}
+
+A trait that specifies an Array does not have a chunked read pattern,
+and random access indexing is relatively performant.
+"""
+struct Unchunked{BS} <: ChunkedTrait{BS}
     batchstrategy::BS
 end
 Unchunked() = Unchunked(SubRanges())
-batchstrategy(c::Chunked) = c.batchstrategy
-batchstrategy(c::Unchunked) = c.batchstrategy
 
-function haschunks end
-haschunks(x) = Unchunked()
 
-struct OffsetChunks end
-struct OneBasedChunks end
+"""
+   ChunkIndexType
+
+Triats for [`ChunkIndex`](@ref).
+
+`OffsetChunks()` or `OneBasedChunks()`.
+"""
+abstract type ChunkIndexType end
+
+struct OffsetChunks <: ChunkIndexType end
+struct OneBasedChunks <: ChunkIndexType end
+
 wrapchunk(x, inds) = OffsetArray(x, inds...)
 
 """
     ChunkIndex{N}
 
-This can be used in indexing operations when one wants to extract a full data chunk from a DiskArray. Useful for 
-iterating over chunks of data. d[ChunkIndex(1,1)] will extract the first chunk of a 2D-DiskArray
+This can be used in indexing operations when one wants to 
+extract a full data chunk from a DiskArray. 
+
+Useful for iterating over chunks of data. 
+
+`d[ChunkIndex(1, 1)]` will extract the first chunk of a 2D-DiskArray
 """
-struct ChunkIndex{N,O}
+struct ChunkIndex{N,O<:ChunkIndexType}
     I::CartesianIndex{N}
     chunktype::O
 end
-function ChunkIndex(i::CartesianIndex; offset=false)
-    return ChunkIndex(i, offset ? OffsetChunks() : OneBasedChunks())
-end
+ChunkIndex(i::CartesianIndex; offset=false) =
+    ChunkIndex(i, offset ? OffsetChunks() : OneBasedChunks())
+ChunkIndex(i::Integer...; kw...) = ChunkIndex(CartesianIndex(i); kw...)
+
 "Removes the offset from a ChunkIndex"
 nooffset(i::ChunkIndex) = ChunkIndex(i.I, OneBasedChunks())
-
-ChunkIndex(i::Integer...; offset=false) = ChunkIndex(CartesianIndex(i); offset)
 
 """
     ChunkIndices{N}
 
-Represents an iterator 
+Represents an iterator of `ChunkIndex` objects.
 """
 struct ChunkIndices{N,RT<:Tuple{Vararg{Any,N}},O} <: AbstractArray{ChunkIndex{N},N}
     I::RT
     chunktype::O
 end
+
 Base.size(i::ChunkIndices) = length.(i.I)
-function Base.getindex(A::ChunkIndices{N}, I::Vararg{Int,N}) where {N}
-    return ChunkIndex(CartesianIndex(getindex.(A.I, I)), A.chunktype)
-end
+Base.getindex(A::ChunkIndices{N}, I::Vararg{Int,N}) where {N} =
+    ChunkIndex(CartesianIndex(getindex.(A.I, I)), A.chunktype)
 Base.eltype(::Type{<:ChunkIndices{N}}) where {N} = ChunkIndex{N}
 
 """
@@ -355,37 +433,24 @@ function element_size(a::AbstractArray)
     end
 end
 
+"""
+    estimate_chunksize(a::AbstractArray)
+
+Estimate a suitable chunk pattern for an `AbstractArray` without chunks.
+"""
 estimate_chunksize(a::AbstractArray) = estimate_chunksize(size(a), element_size(a))
-function estimate_chunksize(s, si)
-    ii = searchsortedfirst(cumprod(collect(s)), default_chunk_size[] * 1e6 / si)
-    cs = ntuple(length(s)) do idim
+function estimate_chunksize(size, elsize)
+    ii = searchsortedfirst(cumprod(collect(size)), default_chunk_size[] * 1e6 / elsize)
+    chunksize = ntuple(length(size)) do idim
         if idim < ii
-            return s[idim]
+            return size[idim]
         elseif idim > ii
             return 1
         else
-            sbefore = idim == 1 ? 1 : prod(s[1:(idim - 1)])
-            return floor(Int, default_chunk_size[] * 1e6 / si / sbefore)
+            sizebefore = idim == 1 ? 1 : prod(size[1:(idim-1)])
+            return floor(Int, default_chunk_size[] * 1e6 / elsize / sizebefore)
         end
     end
-    cs = clamp.(cs, 1, s)
-    return GridChunks(s, cs)
-end
-
-abstract type ChunkTiledDiskArray{T,N} <: AbstractDiskArray{T,N} end
-Base.size(a::ChunkTiledDiskArray) = arraysize_from_chunksize.(eachchunk(a).chunks)
-function DiskArrays.readblock!(A::ChunkTiledDiskArray{T,N}, data, I...) where {T,N}
-    chunks = eachchunk(A)
-    chunk_inds = DiskArrays.findchunk.(chunks.chunks, I)
-    data_offset = OffsetArray(data, map(i -> first(i) - 1, I)...)
-    foreach(CartesianIndices(chunk_inds)) do ci
-        chunkindex = DiskArrays.ChunkIndex(ci, offset=true)
-        chunk = A[chunkindex]
-        inner_indices = map(axes(chunk), axes(data_offset)) do ax1, ax2
-            max(first(ax1), first(ax2)):min(last(ax1), last(ax2))
-        end
-        for ii in CartesianIndices(inner_indices)
-            data_offset[ii] = chunk[ii]
-        end
-    end
+    chunksizes = clamp.(chunksize, 1, size)
+    return GridChunks(size, chunksize)
 end
