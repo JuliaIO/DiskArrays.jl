@@ -89,7 +89,7 @@ function _readblock_padded(A, data, I::AbstractRange...)
     return if all(map(<=, fs, ls))
         Idata = map(:, fs, ls)
         Iparent = map(getindex, Ipadded, Idata)
-        readblock!(parent(A), view(data, Idata...), Iparent...)
+        data[Idata...] .= parent(A)[Iparent...]
     else
         # No overlap, don't read
         data
