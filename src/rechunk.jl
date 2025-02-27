@@ -14,6 +14,13 @@ struct RechunkedDiskArray{T,N,A<:AbstractArray{T,N},C<:GridChunks} <: AbstractDi
     chunks::C
 end
 
+"""
+    rechunk(A::AbstractArray, chunks)
+Rechunk the underlying data of A into the given `chunks`.
+
+"""
+rechunk(data::AbstractDiskArray, chunks::GridChunks) = RechunkedDiskArray(data , chunks)
+
 Base.parent(A::RechunkedDiskArray) = A.parent
 Base.size(A::RechunkedDiskArray) = size(parent(A))
 
