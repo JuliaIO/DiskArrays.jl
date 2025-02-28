@@ -973,6 +973,46 @@ end
     end
 end
 
+@testset "Padded disk arrays" begin
+    M = (1:100) * (1:120)'
+    A = cat(M, 2M, 3M, 4M; dims=3)
+    ch = ChunkedDiskArray(A, (128, 128, 2)) 
+    pa = DiskArrays.pad(ch, ((10, 20), (30, 40), (1, 2)); fill=999)
+    @test size(pa) == (130, 190, 7)
+    # All outside
+    @test all(==(999), pa[1:10, 1:30, 1:1])
+    # All inside
+    @test pa[11:20, 31:40, 3:4] == ch[1:10, 1:10, 2:3]
+    @testset "Overlapping lower" begin
+        regions = pa[10:20, 30:40, 1:2]
+        testdata = copy(regions) .= 999
+        testdata[2:11, 2:11, 2:2] .= ch[1:10, 1:10, 1:1]
+        @test regions == testdata
+    end
+    @testset "Overlapping upper" begin
+        regions = pa[101:120, 141:160, 5:7]
+        testdata = copy(regions) .= 999
+        testdata[1:10, 1:10, 1:1] .= ch[91:100, 111:120, 4:4]
+        @test regions == testdata
+    end
+    @testset "offsets larger than chunks" begin
+        pa1 = DiskArrays.pad(ch, ((201, 147), (390, 33), (1, 2)); fill=1)
+        @test sum(pa1) == prod(size(pa1)) + sum(ch) - prod(size(ch))
+    end
+    @testset "_pad_offset" begin
+        c1 = DiskArrays.RegularChunks(10, 0, 100)
+        @test DiskArrays._pad_offset(c1, (5, 2)) == DiskArrays.RegularChunks(10, 5, 107)
+        @test DiskArrays._pad_offset(c1, (30, 2)) == DiskArrays.RegularChunks(10, 0, 132)
+        @test DiskArrays._pad_offset(c1, (10, 10)) == DiskArrays.RegularChunks(10, 0, 120)
+        @test DiskArrays._pad_offset(c1, (0, 0)) == c1
+
+        c2 = DiskArrays.IrregularChunks(chunksizes = [10, 10, 20, 30, 40])
+        #The following test would assume padding ends up in a separate chunk:
+        @test DiskArrays._pad_offset(c2, (5, 5)) == DiskArrays.IrregularChunks(chunksizes = [5, 10, 10, 20, 30, 40, 5])
+        @test DiskArrays._pad_offset(c2, (0, 0)) == c2
+    end
+end
+
 @testset "Range subset identification" begin
     inds = [1, 2, 2, 3, 5, 6, 7, 10, 10]
     readranges, offsets = DiskArrays.find_subranges_sorted(inds, false)

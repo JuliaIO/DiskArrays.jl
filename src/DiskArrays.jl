@@ -30,6 +30,7 @@ include("generator.jl")
 include("zip.jl")
 include("show.jl")
 include("cached.jl")
+include("pad.jl")
 
 # The all-in-one macro
 
