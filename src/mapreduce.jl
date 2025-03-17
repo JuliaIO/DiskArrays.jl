@@ -66,3 +66,6 @@ function Base.count(f, v::AbstractDiskArray)
         count(f, v[chunk...])
     end
 end
+
+Base.unique(v::AbstractDiskArray) = unique(identity, v)
+Base.unique(f, v::AbstractDiskArray) = union((unique(f, v[c...]) for c in eachchunk(v))...)

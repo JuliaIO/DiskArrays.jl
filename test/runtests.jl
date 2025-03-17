@@ -1059,3 +1059,8 @@ end
     end
     @test count(a) + count(!, a) == length(a)
 end
+
+@testset "unique" begin
+    a = AccessCountDiskArray((1:100) .& 7, chunksize=(9,))
+    @test length(unique(a)) == length(unique(identity, a)) == 8
+end
