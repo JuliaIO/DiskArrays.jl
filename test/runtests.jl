@@ -1049,3 +1049,9 @@ end
     @inferred Matrix{Int} map(identity, da)
     @inferred Matrix{Float64} map(x -> x * 5.0, da)
 end
+
+@testset "count" begin
+    a = ChunkedDiskArray(1:10 .> 3; chunksize=(3, ))
+    @test count(a) == 7
+    @test count(!, a) == 3
+end

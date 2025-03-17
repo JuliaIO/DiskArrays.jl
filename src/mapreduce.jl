@@ -59,6 +59,7 @@ for fname in [:sum, :prod, :all, :any, :minimum, :maximum]
     end
 end
 
+Base.count(v::AbstractDiskArray) = count(identity, v::AbstractDiskArray)
 function Base.count(f, v::AbstractDiskArray)
     sum(eachchunk(v)) do chunk
         count(f, v[chunk...])
