@@ -1051,7 +1051,8 @@ end
 end
 
 @testset "count" begin
-    a = ChunkedDiskArray(1:10 .> 3; chunksize=(3, ))
-    @test count(a) == 7
+    a = ChunkedDiskArray(reshape(1:12,3,4) .> 3; chunksize=(3,3))
+    @test count(a) == 9
     @test count(!, a) == 3
+    @test count(a, init=3) == 12
 end
