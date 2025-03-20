@@ -4,6 +4,7 @@ using DiskArrays.TestTypes
 using Test
 using Statistics
 using Aqua
+using TraceFuns, Suppressor
 
 # Run with any code changes
 # using JET
@@ -1048,4 +1049,13 @@ end
     # Make sure that type inference works
     @inferred Matrix{Int} map(identity, da)
     @inferred Matrix{Float64} map(x -> x * 5.0, da)
+end
+
+@testset "identity function" begin
+    a = ChunkedDiskArray(1:10 .> 3; chunksize=(3, ))
+	for fname in [:sum, :prod, :all, :any, :minimum, :maximum, :count]
+		@eval out = @capture_out @trace $fname($a) DiskArrays
+		@test occursin("DiskGenerator", out) == false
+    end
+    @test count(a) + count(!, a) == length(a)
 end
