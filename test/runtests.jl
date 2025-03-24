@@ -1059,3 +1059,24 @@ end
     end
     @test count(a) + count(!, a) == length(a)
 end
+
+@testset "dims kwarg" begin
+    a = ChunkedDiskArray(reshape(1:3*4*5, 3,4,5); chunksize=(2,3,4))
+	for fname in (:sum, :prod, :minimum, :maximum)
+        @test @eval $fname(a) == $fname(Array(a))
+        @test @eval $fname(a, dims=1) == $fname(Array(a), dims=1)
+        @test @eval $fname(a, dims=2) == $fname(Array(a), dims=2)
+        @test @eval $fname(a, dims=(1,2)) == $fname(Array(a), dims=(1,2))
+		@eval out = @capture_out @trace $fname($a) DiskArrays
+		@test occursin("DiskGenerator", out) == false
+    end
+    b = ChunkedDiskArray(reshape(1:3*4*5 .> 10, 3,4,5); chunksize=(2,3,4))
+	for fname in (:all, :any)
+        @test @eval $fname(b) == $fname(Array(b))
+        @test @eval $fname(b, dims=1) == $fname(Array(b), dims=1)
+        @test @eval $fname(b, dims=2) == $fname(Array(b), dims=2)
+        @test @eval $fname(b, dims=(1,2)) == $fname(Array(b), dims=(1,2))
+		@eval out = @capture_out @trace $fname($b) DiskArrays
+		@test occursin("DiskGenerator", out) == false
+    end
+end

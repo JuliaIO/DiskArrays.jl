@@ -51,9 +51,13 @@ end
 
 # Implementation for special cases and if fallback breaks in future julia versions
 
-for fname in [:sum, :prod, :all, :any, :minimum, :maximum]
-    @eval Base.$fname(v::AbstractDiskArray) = Base.$fname(identity, v::AbstractDiskArray)
-    @eval function Base.$fname(f::Function, v::AbstractDiskArray)
+for (fname, _fname) in ((:sum, :_sum), (:prod, :_prod),
+                        (:all, :_all), (:any, :_any),
+                        (:minimum, :_minimum), (:maximum, :_maximum))
+    @eval Base.$fname(v::AbstractDiskArray; dims=:) = Base.$_fname(v, dims)
+    @eval Base.$fname(f::Function, v::AbstractDiskArray; dims=:) = Base.$_fname(f, v, dims)
+    @eval Base.$_fname(v::AbstractDiskArray, ::Colon) = Base.$_fname(identity, v, :)
+    @eval function Base.$_fname(f::Function, v::AbstractDiskArray, ::Colon)
         $fname(eachchunk(v)) do chunk
             $fname(f, v[chunk...])
         end
@@ -65,4 +69,22 @@ function Base.count(f, v::AbstractDiskArray)
     sum(eachchunk(v)) do chunk
         count(f, v[chunk...])
     end
+end
+
+for (_fname, init, acum) in ((:_sum, :zero, :+), (:_prod, :one, :*),
+                             (:_all, _->:true, :&), (:_any, _->:false, :|),
+                             (:_maximum, :typemin, :max), (:_minimum, :typemax, :min))
+	@eval Base.$_fname(a::AbstractDiskArray, dims)  = Base.$_fname(identity, a, dims)
+	@eval function Base.$_fname(f::Function, a::AbstractDiskArray, dims)
+		_dims = typeof(dims)<:Tuple ? [dims...] : typeof(dims)<:Number ? [dims] : dims
+		out_dims = [size(a)...]
+		out_dims[_dims] .= 1
+		out = fill($init(eltype(a)), out_dims...)
+		for c in eachchunk(a)
+			out_c = [c...]
+			out_c[_dims] .= Ref(1:1)
+			out[out_c...] .= $acum.(out[out_c...], Base.$_fname(f, a[c...], dims))
+		end
+		return out
+	end
 end
