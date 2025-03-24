@@ -79,7 +79,7 @@ for (_fname, init, acum) in ((:_sum, :zero, :+), (:_prod, :one, :*),
 		_dims = typeof(dims)<:Tuple ? [dims...] : typeof(dims)<:Number ? [dims] : dims
 		out_dims = [size(a)...]
 		out_dims[_dims] .= 1
-		out = fill($init(eltype(a)), out_dims...)
+		out = fill($init(Base.return_types(f, (eltype(a),))[1]), out_dims...)
 		for c in eachchunk(a)
 			out_c = [c...]
 			out_c[_dims] .= Ref(1:1)
