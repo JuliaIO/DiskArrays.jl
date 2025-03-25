@@ -74,20 +74,20 @@ end
 for (_fname, init, acum) in ((:_sum, :zero, :+), (:_prod, :one, :*),
                              (:_all, _->:true, :&), (:_any, _->:false, :|),
                              (:_maximum, :typemin, :max), (:_minimum, :typemax, :min))
-	@eval Base.$_fname(a::AbstractDiskArray, dims)  = Base.$_fname(identity, a, dims)
-	@eval function Base.$_fname(f::Function, a::AbstractDiskArray{T,N}, dims) where {T,N}
-		_dims = typeof(dims)<:Tuple ? [dims...] : typeof(dims)<:Number ? [dims] : dims
-		out_dims = ntuple(Val(N)) do i
-			i in _dims ? 1 : size(a)[i]
-		end 
-		T1 = Base.promote_op(f, T)
-		out = fill($init(T1), out_dims...)
-		for c in eachchunk(a)
-			out_c = ntuple(Val(N)) do i
-				i in _dims ? (1:1) : c[i]
-			end 
-			out[out_c...] .= $acum.(out[out_c...], Base.$_fname(f, a[c...], dims))
-		end
-		return out
-	end
+    @eval Base.$_fname(a::AbstractDiskArray, dims)  = Base.$_fname(identity, a, dims)
+    @eval function Base.$_fname(f::Function, a::AbstractDiskArray{T,N}, dims) where {T,N}
+        _dims = typeof(dims)<:Tuple ? [dims...] : typeof(dims)<:Number ? [dims] : dims
+        out_dims = ntuple(Val(N)) do i
+            i in _dims ? 1 : size(a)[i]
+        end 
+        T1 = Base.promote_op(f, T)
+        out = fill($init(T1), out_dims...)
+        for c in eachchunk(a)
+            out_c = ntuple(Val(N)) do i
+                i in _dims ? (1:1) : c[i]
+            end 
+            out[out_c...] .= $acum.(out[out_c...], Base.$_fname(f, a[c...], dims))
+        end
+        return out
+    end
 end
