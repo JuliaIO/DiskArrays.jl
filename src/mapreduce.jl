@@ -80,7 +80,8 @@ for (_fname, init, acum) in ((:_sum, :zero, :+), (:_prod, :one, :*),
 		out_dims = ntuple(Val(N)) do i
 			i in _dims ? 1 : size(a)[i]
 		end 
-		out = fill($init(Base.return_types(f, (T,))[1]), out_dims...)
+		T1 = Base.promote_op(f, T)
+		out = fill($init(T1), out_dims...)
 		for c in eachchunk(a)
 			out_c = ntuple(Val(N)) do i
 				i in _dims ? (1:1) : c[i]
