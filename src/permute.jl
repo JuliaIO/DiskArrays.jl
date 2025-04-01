@@ -43,7 +43,7 @@ _getperm(::PermutedDimsArray{<:Any,<:Any,perm}) where {perm} = perm
 _getiperm(a::PermutedDiskArray) = _getiperm(a.a)
 _getiperm(::PermutedDimsArray{<:Any,<:Any,<:Any,iperm}) where {iperm} = iperm
 
-# Implementaion macros
+# Implementation macros
 
 function permutedims_disk(a, perm)
     pd = PermutedDimsArray(a, perm)
@@ -54,5 +54,9 @@ macro implement_permutedims(t)
     t = esc(t)
     quote
         Base.permutedims(parent::$t, perm) = permutedims_disk(parent, perm)
+        # It's not correct to return a PermutedDiskArray from the PermutedDimsArray constructor.
+        # Instead we need a Base julia method that behaves like view for SubArray, such as `lazypermutedims`.
+        # But until that exists this is better than returning a broken disk array.
+        Base.PermutedDimsArray(parent::$t, perm) = permutedims_disk(parent, perm)
     end
 end
