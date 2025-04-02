@@ -4,20 +4,31 @@
 A lazily permuted disk array returned by `permutedims(diskarray, permutation)`.
 """
 struct PermutedDiskArray{T,N,perm,iperm,A<:AbstractArray{T,N}} <: AbstractDiskArray{T,N}
-    a::A
+    parent::A
 end
+# We use PermutedDimsArray internals instead of duplicating them,
+# and just copy the type parameters it calculates.
 PermutedDiskArray(A::AbstractArray, perm::Union{Tuple,AbstractVector}) =
     PermutedDiskArray(A, PermutedDimsArray(CartesianIndices(A), perm))
-# We use PermutedDimsArray internals instead of duplicating them,
-# and just copy the type parameters
 function PermutedDiskArray(
-    a::A, perm::PermutedDimsArray{<:Any,<:Any,perm,iperm}
-) where {A<:AbstractArray{T,N},perm,iperm} where {T,N} =
+    a::A, ::PermutedDimsArray{<:Any,<:Any,perm,iperm}
+) where {A<:AbstractArray{T,N},perm,iperm} where {T,N}
     PermutedDiskArray{T,N,perm,iperm,A}(a)
 end
 
+# We need explicit ConstructionBase support as perm and iperm are only in the type.
+# We include N so that only arrays of the same dimensionality can be set with this perm and iperm
+struct PermutedDiskArrayConstructor{N,perm,iperm} end
+
+(::PermutedDiskArrayConstructor{N,perm,iperm})(a::A) where A<:AbstractArray{T,N} where {T,N,perm,iperm} = 
+    PermutedDiskArray{T,N,perm,iperm,A}(a)
+
+ConstructionBase.constructorof(::Type{<:PermutedDiskArray{<:Any,N,perm,iperm}}) where {N,perm,iperm} = 
+    PermutedDiskArrayConstructor{N,perm,iperm}()
+
 # Base methods
 
+Base.parent(a::PermutedDiskArray) = a.parent
 Base.size(a::PermutedDiskArray) = genperm(size(parent(a)), _getperm(a))
 
 # DiskArrays interface
@@ -35,14 +46,14 @@ function DiskArrays.readblock!(a::PermutedDiskArray, aout, i::OrdinalRange...)
     # Permute the indices
     inew = genperm(i, iperm)
     # Permute the dest block and read from the true parent
-    DiskArrays.readblock!(a.a.parent, PermutedDimsArray(aout, iperm), inew...)
+    DiskArrays.readblock!(parent(a), PermutedDimsArray(aout, iperm), inew...)
     return nothing
 end
 function DiskArrays.writeblock!(a::PermutedDiskArray, v, i::OrdinalRange...)
     iperm = _getiperm(a)
     inew = genperm(i, iperm)
     # Permute the dest block and write from the true parent
-    DiskArrays.writeblock!(a.a.parent, PermutedDimsArray(v, iperm), inew...)
+    DiskArrays.writeblock!(parent(a), PermutedDimsArray(v, iperm), inew...)
     return nothing
 end
 
