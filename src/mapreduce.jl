@@ -52,6 +52,7 @@ end
 # Implementation for special cases and if fallback breaks in future julia versions
 
 for fname in [:sum, :prod, :all, :any, :minimum, :maximum]
+    @eval Base.$fname(v::AbstractDiskArray) = Base.$fname(identity, v::AbstractDiskArray)
     @eval function Base.$fname(f::Function, v::AbstractDiskArray)
         $fname(eachchunk(v)) do chunk
             $fname(f, v[chunk...])
@@ -59,6 +60,7 @@ for fname in [:sum, :prod, :all, :any, :minimum, :maximum]
     end
 end
 
+Base.count(v::AbstractDiskArray) = count(identity, v::AbstractDiskArray)
 function Base.count(f, v::AbstractDiskArray)
     sum(eachchunk(v)) do chunk
         count(f, v[chunk...])
