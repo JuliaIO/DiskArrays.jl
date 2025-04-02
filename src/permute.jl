@@ -4,7 +4,7 @@
 A lazily permuted disk array returned by `permutedims(diskarray, permutation)`.
 """
 struct PermutedDiskArray{T,N,perm,iperm,A<:AbstractArray{T,N}} <: AbstractDiskArray{T,N}
-    a::P
+    a::A
 end
 PermutedDiskArray(A::AbstractArray, perm::Union{Tuple,AbstractVector}) =
     PermutedDiskArray(A, PermutedDimsArray(CartesianIndices(A), perm))
