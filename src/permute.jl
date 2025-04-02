@@ -3,21 +3,30 @@
 
 A lazily permuted disk array returned by `permutedims(diskarray, permutation)`.
 """
-struct PermutedDiskArray{T,N,P<:PermutedDimsArray{T,N}} <: AbstractDiskArray{T,N}
+struct PermutedDiskArray{T,N,perm,iperm,A<:AbstractArray{T,N}} <: AbstractDiskArray{T,N}
     a::P
+end
+PermutedDiskArray(A::AbstractArray, perm::Union{Tuple,AbstractVector}) =
+    PermutedDiskArray(A, PermutedDimsArray(CartesianIndices(A), perm))
+# We use PermutedDimsArray internals instead of duplicating them,
+# and just copy the type parameters
+function PermutedDiskArray(
+    a::A, perm::PermutedDimsArray{<:Any,<:Any,perm,iperm}
+) where {A<:AbstractArray{T,N},perm,iperm} where {T,N} =
+    PermutedDiskArray{T,N,perm,iperm,A}(a)
 end
 
 # Base methods
 
-Base.size(a::PermutedDiskArray) = size(a.a)
+Base.size(a::PermutedDiskArray) = genperm(size(parent(a)), _getperm(a))
 
 # DiskArrays interface
 
-haschunks(a::PermutedDiskArray) = haschunks(a.a.parent)
+haschunks(a::PermutedDiskArray) = haschunks(parent(a))
 function eachchunk(a::PermutedDiskArray)
     # Get the parent chunks
-    gridchunks = eachchunk(a.a.parent)
-    perm = _getperm(a.a)
+    gridchunks = eachchunk(parent(a))
+    perm = _getperm(a)
     # Return permuted GridChunks
     return GridChunks(genperm(gridchunks.chunks, perm)...)
 end
@@ -37,26 +46,18 @@ function DiskArrays.writeblock!(a::PermutedDiskArray, v, i::OrdinalRange...)
     return nothing
 end
 
-_getperm(a::PermutedDiskArray) = _getperm(a.a)
-_getperm(::PermutedDimsArray{<:Any,<:Any,perm}) where {perm} = perm
+_getperm(::PermutedDiskArray{<:Any,<:Any,perm}) where {perm} = perm
+_getiperm(::PermutedDiskArray{<:Any,<:Any,<:Any,iperm}) where {iperm} = iperm
 
-_getiperm(a::PermutedDiskArray) = _getiperm(a.a)
-_getiperm(::PermutedDimsArray{<:Any,<:Any,<:Any,iperm}) where {iperm} = iperm
-
-# Implementation macros
-
-function permutedims_disk(a, perm)
-    pd = PermutedDimsArray(a, perm)
-    return PermutedDiskArray{eltype(a),ndims(a),typeof(pd)}(pd)
-end
+# Implementation macro
 
 macro implement_permutedims(t)
     t = esc(t)
     quote
-        Base.permutedims(parent::$t, perm) = permutedims_disk(parent, perm)
+        Base.permutedims(parent::$t, perm) = PermutedDiskArray(parent, perm)
         # It's not correct to return a PermutedDiskArray from the PermutedDimsArray constructor.
         # Instead we need a Base julia method that behaves like view for SubArray, such as `lazypermutedims`.
         # But until that exists this is better than returning a broken disk array.
-        Base.PermutedDimsArray(parent::$t, perm) = permutedims_disk(parent, perm)
+        Base.PermutedDimsArray(parent::$t, perm) = PermutedDiskArray(parent, perm)
     end
 end
