@@ -1061,3 +1061,11 @@ end
     end
     @test count(a) + count(!, a) == length(a)
 end
+
+@testset "unique" begin
+    a = ChunkedDiskArray((1:100) .& 7, chunksize=(9,))
+    out = @capture_out @trace unique(a) DiskArrays
+    @test occursin("_iterate_disk", out) == false
+    @test length(unique(a)) == length(unique(identity, a)) == 8
+    @test unique(x->x>3, a) == [1,4]
+end
