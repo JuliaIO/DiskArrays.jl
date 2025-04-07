@@ -22,7 +22,7 @@ function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray{<:Any,N},M}) wher
     T = mapreduce(eltype, promote_type, init=eltype(first(arrays)), arrays)
 
     if N > M
-        newshape = extenddims(size(arrays), size(first(arrays)),1)
+        newshape = extenddims(size(arrays), size(first(arrays)), 1)
         arrays1 = reshape(arrays, newshape)
         D = N
     else
@@ -42,17 +42,17 @@ function ConcatDiskArray(arrays::AbstractArray)
         error("Arrays don't have the same dimensions")
     return error("Should not be reached")
 end
-extenddims(a::Tuple{Vararg{<:Any,N}}, b::Tuple{Vararg{<:Any,M}}, fillval) where {N,M} = extenddims((a..., fillval), b, fillval)
-extenddims(a::Tuple{Vararg{<:Any,N}}, _::Tuple{Vararg{<:Any,N}}, _) where {N} = a
+extenddims(a::Tuple{Vararg{Any,N}}, b::Tuple{Vararg{Any,M}}, fillval) where {N,M} = extenddims((a..., fillval), b, fillval)
+extenddims(a::Tuple{Vararg{Any,N}}, _::Tuple{Vararg{Any,N}}, _) where {N} = a
 
 Base.size(a::ConcatDiskArray) = a.size
 
 function arraysize_and_startinds(arrays1)
-    sizes = map(i->zeros(Int,i),size(arrays1))
+    sizes = map(i -> zeros(Int, i), size(arrays1))
     for i in CartesianIndices(arrays1)
         ai = arrays1[i]
         sizecur = extenddims(size(ai), size(arrays1), 1)
-        foreach(sizecur,i.I,sizes) do si, ind, sizeall
+        foreach(sizecur, i.I, sizes) do si, ind, sizeall
             if sizeall[ind] == 0
                 #init the size
                 sizeall[ind] = si
@@ -64,9 +64,9 @@ function arraysize_and_startinds(arrays1)
     r = map(sizes) do sizeall
         pushfirst!(sizeall, 1)
         for i in 2:length(sizeall)
-            sizeall[i] = sizeall[i-1]+sizeall[i]
+            sizeall[i] = sizeall[i-1] + sizeall[i]
         end
-        pop!(sizeall)-1,sizeall
+        pop!(sizeall) - 1, sizeall
     end
     map(last, r), map(first, r)
 end
@@ -86,7 +86,7 @@ end
 function writeblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
         data = view(aout, outer_range...)
-        writeblock!(a.parents[I], data, array_range)
+        writeblock!(a.parents[I], data, array_range...)
     end
 end
 
@@ -123,11 +123,11 @@ fix_outerrangeshape(res, ::Tuple{}, ::Tuple{}) = res
 
 
 function concat_chunksize(parents)
-    newchunks = map(s->Vector{Union{RegularChunks, IrregularChunks}}(undef, s) ,size(parents))
+    newchunks = map(s -> Vector{Union{RegularChunks,IrregularChunks}}(undef, s), size(parents))
     for i in CartesianIndices(parents)
         array = parents[i]
         chunks = eachchunk(array)
-        foreach(chunks.chunks,i.I,newchunks) do c, ind, newc
+        foreach(chunks.chunks, i.I, newchunks) do c, ind, newc
             if !isassigned(newc, ind)
                 newc[ind] = c
             elseif c != newc[ind]
@@ -146,7 +146,7 @@ function concat_chunksize(parents)
         init = RegularChunks(approx_chunksize(first(v)), 0, 0)
         reduce(mergechunks, v; init=init)
     end
-    extenddims(newchunks, size(parents), RegularChunks(1,0,1))
+    extenddims(newchunks, size(parents), RegularChunks(1, 0, 1))
     return GridChunks(newchunks...)
 end
 

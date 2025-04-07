@@ -23,6 +23,14 @@ The only function that should be implemented by a `AbstractDiskArray`. This func
 """
 function readblock! end
 
+function readblock!(a::AbstractArray, aout, r...)
+    # Fallback implementation for arrays that are not DiskArrays
+    if isdisk(a)
+        @warn "Using fallback readblock! for array $(typeof(a)). This should not happen but there should be a custom implementation."
+    end
+    copyto!(aout, CartesianIndices(aout), a, CartesianIndices(r))
+end
+
 """
     writeblock!(A::AbstractDiskArray, A_in, r::AbstractUnitRange...)
 
