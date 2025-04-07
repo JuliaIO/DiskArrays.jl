@@ -21,46 +21,17 @@ end
 function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray{<:Any,N},M}) where {N,M}
     T = mapreduce(eltype, promote_type, init=eltype(first(arrays)), arrays)
 
-    function othersize(x, id)
-        return (x[1:(id-1)]..., x[(id+1):end]...)
-    end
     if N > M
-        newshape = (size(arrays)..., ntuple(_ -> 1, N - M)...)
+        newshape = extenddims(size(arrays), size(first(arrays)))
+        @show newshape
         arrays1 = reshape(arrays, newshape)
         D = N
-    elseif N < M
-        arrays1 = map(arrays) do a
-            newshape = (size(a)..., ntuple(_ -> 1, M - N)...)
-            reshape(a, newshape)
-        end
-        D = M
     else
         arrays1 = arrays
         D = M
     end
-    arraysizes = map(size, arrays1)
-    si = ntuple(D) do id
-        a = reduce(arraysizes; dims=id, init=ntuple(zero, D)) do i, j
-            if all(iszero, i)
-                j
-            elseif othersize(i, id) == othersize(j, id)
-                j
-            else
-                error("Dimension sizes don't match")
-            end
-        end
-        I = ntuple(D) do i
-            i == id ? Colon() : 1
-        end
-        ari = map(i -> i[id], arraysizes[I...])
-        sl = sum(ari)
-        r = cumsum(ari)
-        pop!(pushfirst!(r, 0))
-        r .+ 1, sl
-    end
-
-    startinds = map(first, si)
-    sizes = map(last, si)
+    startinds, sizes = arraysize_and_startinds(arrays1)
+    @show startinds, sizes
 
     chunks = concat_chunksize(D, arrays1)
     hc = Chunked(batchstrategy(chunks))
@@ -73,8 +44,34 @@ function ConcatDiskArray(arrays::AbstractArray)
         error("Arrays don't have the same dimensions")
     return error("Should not be reached")
 end
+extenddims(a::NTuple{N,Int},b::NTuple{M,Int}) where {N,M} = extenddims((a...,1), b)
+extenddims(a::NTuple{N,Int},b::NTuple{N,Int}) where {N} = a
 
 Base.size(a::ConcatDiskArray) = a.size
+
+function arraysize_and_startinds(arrays1)
+    sizes = map(i->zeros(Int,i),size(arrays1))
+    for i in CartesianIndices(arrays1)
+        ai = arrays1[i]
+        sizecur = size(ai)
+        foreach(sizecur,i.I,sizes) do si, ind, sizeall
+            if sizeall[ind] == 0
+                #init the size
+                sizeall[ind] = si
+            elseif sizeall[ind] != si
+                throw(ArgumentError("Array sizes don't form a grid"))
+            end
+        end
+    end
+    r = map(sizes) do sizeall
+        pushfirst!(sizeall, 1)
+        for i in 2:length(sizeall)
+            sizeall[i] = sizeall[i-1]+sizeall[i]
+        end
+        pop!(sizeall)-1,sizeall
+    end
+    map(last, r), map(first, r)
+end
 
 # DiskArrays interface
 
