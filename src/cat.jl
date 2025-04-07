@@ -42,8 +42,8 @@ function ConcatDiskArray(arrays::AbstractArray)
         error("Arrays don't have the same dimensions")
     return error("Should not be reached")
 end
-extenddims(a::NTuple{N},b::NTuple{M},fillval) where {N,M} = extenddims((a...,fillval), b, fillval)
-extenddims(a::NTuple{N},_::NTuple{N},_) where {N} = a
+extenddims(a::Tuple{Vararg{<:Any,N}}, b::Tuple{Vararg{<:Any,M}}, fillval) where {N,M} = extenddims((a..., fillval), b, fillval)
+extenddims(a::Tuple{Vararg{<:Any,N}}, _::Tuple{Vararg{<:Any,N}}, _) where {N} = a
 
 Base.size(a::ConcatDiskArray) = a.size
 
@@ -51,7 +51,7 @@ function arraysize_and_startinds(arrays1)
     sizes = map(i->zeros(Int,i),size(arrays1))
     for i in CartesianIndices(arrays1)
         ai = arrays1[i]
-        sizecur = size(ai)
+        sizecur = extenddims(size(ai), size(arrays1), 1)
         foreach(sizecur,i.I,sizes) do si, ind, sizeall
             if sizeall[ind] == 0
                 #init the size
@@ -79,12 +79,14 @@ haschunks(c::ConcatDiskArray) = c.haschunks
 function readblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     # Find affected blocks and indices in blocks
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
-        aout[outer_range...] = a.parents[I][array_range...]
+        vout = view(aout, outer_range...)
+        readblock!(a.parents[I], vout, array_range...)
     end
 end
 function writeblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
-        a.parents[I][array_range...] = aout[outer_range...]
+        data = view(aout, outer_range...)
+        writeblock!(a.parents[I], data, array_range)
     end
 end
 
@@ -99,17 +101,26 @@ function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
     end
     map(CartesianIndices(blockinds)) do cI
         myar = a.parents[cI]
-        mysize = size(myar)
+        mysize = extenddims(size(myar), cI.I, 1)
         array_range = map(cI.I, a.startinds, mysize, inds) do ii, si, ms, indstoread
             max(first(indstoread) - si[ii] + 1, 1):min(last(indstoread) - si[ii] + 1, ms)
         end
         outer_range = map(cI.I, a.startinds, array_range, inds) do ii, si, ar, indstoread
             (first(ar)+si[ii]-first(indstoread)):(last(ar)+si[ii]-first(indstoread))
         end
-        # aout[outer_range...] = a.parents[cI][array_range...]
+        #Shorten array range to shape of actual array
+        array_range = map((i, j) -> j, size(myar), array_range)
+        outer_range = fix_outerrangeshape(outer_range, array_range)
         f(outer_range, array_range, cI)
     end
 end
+fix_outerrangeshape(outer_range, array_range) = fix_outerrangeshape((), outer_range, array_range)
+fix_outerrangeshape(res, outer_range, array_range) =
+    fix_outerrangeshape((res..., first(outer_range)), Base.tail(outer_range), Base.tail(array_range))
+fix_outerrangeshape(res, outer_range, ::Tuple{}) =
+    fix_outerrangeshape((res..., only(first(outer_range))), Base.tail(outer_range), ())
+fix_outerrangeshape(res, ::Tuple{}, ::Tuple{}) = res
+
 
 function concat_chunksize(parents)
     newchunks = map(s->Vector{Union{RegularChunks, IrregularChunks}}(undef, s) ,size(parents))
@@ -125,6 +136,13 @@ function concat_chunksize(parents)
         end
     end
     newchunks = map(newchunks) do v
+        #Chunks that have not been set are from additional dimensions in the parent array shape
+        for i in eachindex(v)
+            if !isassigned(v, i)
+                v[i] = RegularChunks(1, 0, 1)
+            end
+        end
+        # Merge the chunks
         init = RegularChunks(approx_chunksize(first(v)), 0, 0)
         reduce(mergechunks, v; init=init)
     end
