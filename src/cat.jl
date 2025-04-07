@@ -22,8 +22,7 @@ function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray{<:Any,N},M}) wher
     T = mapreduce(eltype, promote_type, init=eltype(first(arrays)), arrays)
 
     if N > M
-        newshape = extenddims(size(arrays), size(first(arrays)))
-        @show newshape
+        newshape = extenddims(size(arrays), size(first(arrays)),1)
         arrays1 = reshape(arrays, newshape)
         D = N
     else
@@ -31,9 +30,8 @@ function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray{<:Any,N},M}) wher
         D = M
     end
     startinds, sizes = arraysize_and_startinds(arrays1)
-    @show startinds, sizes
 
-    chunks = concat_chunksize(D, arrays1)
+    chunks = concat_chunksize(arrays1)
     hc = Chunked(batchstrategy(chunks))
 
     return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc)}(arrays1, startinds, sizes, chunks, hc)
@@ -44,8 +42,8 @@ function ConcatDiskArray(arrays::AbstractArray)
         error("Arrays don't have the same dimensions")
     return error("Should not be reached")
 end
-extenddims(a::NTuple{N,Int},b::NTuple{M,Int}) where {N,M} = extenddims((a...,1), b)
-extenddims(a::NTuple{N,Int},b::NTuple{N,Int}) where {N} = a
+extenddims(a::NTuple{N},b::NTuple{M},fillval) where {N,M} = extenddims((a...,fillval), b, fillval)
+extenddims(a::NTuple{N},_::NTuple{N},_) where {N} = a
 
 Base.size(a::ConcatDiskArray) = a.size
 
@@ -113,15 +111,24 @@ function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
     end
 end
 
-function concat_chunksize(N, parents)
-    oldchunks = map(eachchunk, parents)
-    newchunks = ntuple(N) do i
-        sliceinds = Base.setindex(ntuple(_ -> 1, N), :, i)
-        v = map(c -> c.chunks[i], oldchunks[sliceinds...])
+function concat_chunksize(parents)
+    newchunks = map(s->Vector{Union{RegularChunks, IrregularChunks}}(undef, s) ,size(parents))
+    for i in CartesianIndices(parents)
+        array = parents[i]
+        chunks = eachchunk(array)
+        foreach(chunks.chunks,i.I,newchunks) do c, ind, newc
+            if !isassigned(newc, ind)
+                newc[ind] = c
+            elseif c != newc[ind]
+                throw(ArgumentError("Chunk sizes don't forma grid"))
+            end
+        end
+    end
+    newchunks = map(newchunks) do v
         init = RegularChunks(approx_chunksize(first(v)), 0, 0)
         reduce(mergechunks, v; init=init)
     end
-
+    extenddims(newchunks, size(parents), RegularChunks(1,0,1))
     return GridChunks(newchunks...)
 end
 
