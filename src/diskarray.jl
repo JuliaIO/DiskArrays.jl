@@ -28,7 +28,7 @@ function readblock!(a::AbstractArray, aout, r...)
     if isdisk(a)
         @warn "Using fallback readblock! for array $(typeof(a)). This should not happen but there should be a custom implementation."
     end
-    copyto!(aout, CartesianIndices(aout), a, CartesianIndices(r))
+    aout .= view(a, CartesianIndices(r))
 end
 
 """
