@@ -5,7 +5,11 @@
     ConcatDiskArray(arrays)
 
 Joins multiple `AbstractArray`s or `AbstractDiskArray`s into
-a single disk array, using lazy concatination.
+a single disk array, using lazy concatination. Note that if some elements
+of `arrays` are `missing`, this array will be interpreted as a block containing 
+only missing elements. This can be useful when concatenating mosaics of tiles 
+where some tiles in are missing or when stacking arrays along a new dimension
+and some layers are missing. 
 
 Returned from `cat` on disk arrays. 
 
