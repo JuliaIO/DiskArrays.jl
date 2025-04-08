@@ -23,6 +23,7 @@ end
 
 # Base methods
 
+Base.parent(r::ReshapedDiskArray) = r.parent
 Base.size(r::ReshapedDiskArray) = r.newsize
 
 # DiskArrays interface
