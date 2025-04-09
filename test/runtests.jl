@@ -491,6 +491,33 @@ end
         @test slic isa Vector{Float64}
         @test slic == Float64[1, 2, 3, 4, 1, 2, 3, 4]
     end
+
+    @testset "Concat DiskArray with missing tiles" begin
+        a = zeros(Int, 3, 4)
+        b = ones(Int, 2, 4)
+        c = fill(2, 3, 5)
+        d = fill(missing, 2, 5)
+        aconc = DiskArrays.ConcatDiskArray(reshape([a, b, c, missing], 2, 2))
+        abase = [a c; b d]
+        @test all(isequal.(aconc[:, :], abase))
+        @test all(isequal.(aconc[3:4, 4:6], abase[3:4, 4:6]))
+        ch = DiskArrays.eachchunk(aconc)
+        @test ch.chunks[1] == [1:3, 4:5]
+        @test ch.chunks[2] == [1:4, 5:9]
+
+        a = ones(100, 50)
+        b = [rem(i.I[3], 5) == 0 ? missing : a for i in CartesianIndices((1, 1, 100))]
+        b[1] = missing
+        a_conc = DiskArrays.ConcatDiskArray(b)
+        ch = eachchunk(a_conc)
+        @test ch.chunks[1] == [1:100]
+        @test ch.chunks[2] == [1:50]
+        @test ch.chunks[3] === DiskArrays.RegularChunks(1, 0, 100)
+
+        @test all(isequal.(a_conc[2, 2, 1:5], [missing, 1.0, 1.0, 1.0, missing]))
+        @test all(isequal.(a_conc[end, end, 95:100], [missing, 1.0, 1.0, 1.0, 1.0, missing]))
+
+    end
 end
 
 @testset "Broadcast with length 1 and 0 final dim" begin
@@ -979,7 +1006,7 @@ end
 @testset "Padded disk arrays" begin
     M = (1:100) * (1:120)'
     A = cat(M, 2M, 3M, 4M; dims=3)
-    ch = ChunkedDiskArray(A, (128, 128, 2)) 
+    ch = ChunkedDiskArray(A, (128, 128, 2))
     pa = DiskArrays.pad(ch, ((10, 20), (30, 40), (1, 2)); fill=999)
     @test size(pa) == (130, 190, 7)
     # All outside
@@ -1009,9 +1036,9 @@ end
         @test DiskArrays._pad_offset(c1, (10, 10)) == DiskArrays.RegularChunks(10, 0, 120)
         @test DiskArrays._pad_offset(c1, (0, 0)) == c1
 
-        c2 = DiskArrays.IrregularChunks(chunksizes = [10, 10, 20, 30, 40])
+        c2 = DiskArrays.IrregularChunks(chunksizes=[10, 10, 20, 30, 40])
         #The following test would assume padding ends up in a separate chunk:
-        @test DiskArrays._pad_offset(c2, (5, 5)) == DiskArrays.IrregularChunks(chunksizes = [5, 10, 10, 20, 30, 40, 5])
+        @test DiskArrays._pad_offset(c2, (5, 5)) == DiskArrays.IrregularChunks(chunksizes=[5, 10, 10, 20, 30, 40, 5])
         @test DiskArrays._pad_offset(c2, (0, 0)) == c2
     end
 end
@@ -1054,10 +1081,10 @@ end
 end
 
 @testset "identity function" begin
-    a = ChunkedDiskArray(1:10 .> 3; chunksize=(3, ))
-	for fname in [:sum, :prod, :all, :any, :minimum, :maximum, :count]
-		@eval out = @capture_out @trace $fname($a) DiskArrays
-		@test occursin("DiskGenerator", out) == false
+    a = ChunkedDiskArray(1:10 .> 3; chunksize=(3,))
+    for fname in [:sum, :prod, :all, :any, :minimum, :maximum, :count]
+        @eval out = @capture_out @trace $fname($a) DiskArrays
+        @test occursin("DiskGenerator", out) == false
     end
     @test count(a) + count(!, a) == length(a)
 end
