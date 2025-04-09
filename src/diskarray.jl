@@ -29,6 +29,7 @@ function readblock!(a::AbstractArray, aout, r...)
         @warn "Using fallback readblock! for array $(typeof(a)). This should not happen but there should be a custom implementation."
     end
     aout .= view(a, CartesianIndices(r))
+    nothing
 end
 
 """

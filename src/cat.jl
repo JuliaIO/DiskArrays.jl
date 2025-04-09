@@ -15,12 +15,13 @@ Returned from `cat` on disk arrays.
 
 It is also useful on its own as it can easily concatenate an array of disk arrays.
 """
-struct ConcatDiskArray{T,N,P,C,HC} <: AbstractDiskArray{T,N}
+struct ConcatDiskArray{T,N,P,C,HC,ID} <: AbstractDiskArray{T,N}
     parents::P
     startinds::NTuple{N,Vector{Int}}
     size::NTuple{N,Int}
     chunks::C
     haschunks::HC
+    innerdims::Val{ID}
 end
 
 function ConcatDiskArray(arrays::AbstractArray{Union{<:AbstractArray,Missing}})
@@ -30,15 +31,8 @@ function ConcatDiskArray(arrays::AbstractArray{Union{<:AbstractArray,Missing}})
     M = ndims(et)
     _ConcatDiskArray(arrays, T, Val(N), Val(M))
 end
-function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray})
-    T = eltype(eltype(arrays))
-    N = ndims(arrays)
-    M = ndims(eltype(arrays))
-    _ConcatDiskArray(arrays, T, Val(N), Val(M))
-end
-function ConcatDiskArray(arrays::AbstractArray)
-    N = ndims(arrays)
-    M, T = foldl(arrays, init=(-1, Union{})) do (M, T), a
+function infer_eltypes(arrays)
+    foldl(arrays, init=(-1, Union{})) do (M, T), a
         if ismissing(a)
             (M, promote_type(Missing, T))
         else
@@ -46,31 +40,48 @@ function ConcatDiskArray(arrays::AbstractArray)
             (ndims(a), promote_type(eltype(a), T))
         end
     end
+end
+function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray})
+    N = ndims(arrays)
+    T = eltype(eltype(arrays))
+    if !isconcretetype(T)
+        M,T = infer_eltypes(arrays)
+    else
+        M = ndims(eltype(arrays))
+    end
+    _ConcatDiskArray(arrays, T, Val(N), Val(M))
+end
+function ConcatDiskArray(arrays::AbstractArray)
+    N = ndims(arrays)
+    M,T = infer_eltypes(arrays)
     _ConcatDiskArray(arrays, T, Val(N), Val(M))
 end
 
 
 function _ConcatDiskArray(arrays, T, ::Val{N}, ::Val{M}) where {N,M}
-    if N > M
-        newshape = extenddims(size(arrays), ntuple(_ -> 1, N), 1)
+    if N < M
+        newshape = extenddims(size(arrays), ntuple(_ -> 1, M), 1)
         arrays1 = reshape(arrays, newshape)
-        D = N
+        D = M
     else
         arrays1 = arrays
-        D = M
+        D = N
     end
-    _ConcatDiskArray(arrays1::AbstractArray, T, Val(D))
+    ConcatDiskArray(arrays1::AbstractArray, T, Val(D), Val(M))
 end
-function _ConcatDiskArray(arrays1::AbstractArray, T, ::Val{D}) where {D}
+function ConcatDiskArray(arrays1::AbstractArray, T, ::Val{D},::Val{ID}) where {D,ID}
     startinds, sizes = arraysize_and_startinds(arrays1)
 
     chunks = concat_chunksize(arrays1)
     hc = Chunked(batchstrategy(chunks))
 
-    return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc)}(arrays1, startinds, sizes, chunks, hc)
+    return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc),ID}(arrays1, startinds, sizes, chunks, hc,Val(ID))
 end
 
-extenddims(a::Tuple{Vararg{Any,N}}, b::Tuple{Vararg{Any,M}}, fillval) where {N,M} = extenddims((a..., fillval), b, fillval)
+function extenddims(a::Tuple{Vararg{Any,N}}, b::Tuple{Vararg{Any,M}}, fillval) where {N,M} 
+    length(a) > length(b) && error("Wrong")
+    extenddims((a..., fillval), b, fillval)
+end
 extenddims(a::Tuple{Vararg{Any,N}}, _::Tuple{Vararg{Any,N}}, _) where {N} = a
 
 Base.size(a::ConcatDiskArray) = a.size
@@ -134,9 +145,12 @@ function writeblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
 end
 
 # Utils
+ninnerdims(a::ConcatDiskArray) = ninnerdims(a.innerdims)
+ninnerdims(::Val{ID}) where ID = ID
 
 function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
     # Find affected blocks and indices in blocks
+    ID = ninnerdims(a)
     blockinds = map(inds, a.startinds, size(a.parents)) do i, si, s
         bi1 = max(searchsortedlast(si, first(i)), 1)
         bi2 = min(searchsortedfirst(si, last(i) + 1) - 1, s)
@@ -147,15 +161,14 @@ function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
         size_inferred = map(a.startinds, size(a), cI.I) do si, sa, ii
             ii == length(si) ? sa - si[ii] + 1 : si[ii+1] - si[ii]
         end
-        mysize = extenddims(size_inferred, cI.I, 1)
-        array_range = map(cI.I, a.startinds, mysize, inds) do ii, si, ms, indstoread
+        array_range = map(cI.I, a.startinds, size_inferred, inds) do ii, si, ms, indstoread
             max(first(indstoread) - si[ii] + 1, 1):min(last(indstoread) - si[ii] + 1, ms)
         end
         outer_range = map(cI.I, a.startinds, array_range, inds) do ii, si, ar, indstoread
             (first(ar)+si[ii]-first(indstoread)):(last(ar)+si[ii]-first(indstoread))
         end
         #Shorten array range to shape of actual array
-        array_range = map((i, j) -> j, size_inferred, array_range)
+        array_range = ntuple(j -> array_range[j], ID)
         outer_range = fix_outerrangeshape(outer_range, array_range)
         if ismissing(myar)
             f(outer_range, array_range, missing)
