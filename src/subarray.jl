@@ -1,32 +1,39 @@
 """
     SubDiskArray <: AbstractDiskArray
 
+Abstract supertype for a view of an AbstractDiskArray
+"""
+abstract type AbstractSubDiskArray{T,N,P,I,L} <: AbstractDiskArray{T,N} end
+
+"""
+    SubDiskArray <: AbstractDiskArray
+
 A replacement for `Base.SubArray` for disk arrays, returned by `view`.
 """
-struct SubDiskArray{T,N,P,I,L} <: AbstractDiskArray{T,N}
+struct SubDiskArray{T,N,P,I,L} <: AbstractSubDiskArray{T,N,P,I,L}
     v::SubArray{T,N,P,I,L}
 end
 
 # Base methods
-Base.view(a::SubDiskArray, i...) = SubDiskArray(view(a.v, i...))
-Base.view(a::SubDiskArray, i::CartesianIndices) = view(a, i.indices...)
-Base.size(a::SubDiskArray) = size(a.v)
-Base.parent(a::SubDiskArray) = a.v.parent
+Base.view(a::AbstractSubDiskArray, i...) = SubDiskArray(view(a.v, i...))
+Base.view(a::AbstractSubDiskArray, i::CartesianIndices) = view(a, i.indices...)
+Base.size(a::AbstractSubDiskArray) = size(a.v)
+Base.parent(a::AbstractSubDiskArray) = a.v.parent
 
 _replace_colon(s, ::Colon) = Base.OneTo(s)
 _replace_colon(s, r) = r
 
 # Diskarrays.jl interface
-function readblock!(a::SubDiskArray, aout, i::OrdinalRange...)
+function readblock!(a::AbstractSubDiskArray, aout, i::OrdinalRange...)
     pinds = parentindices(view(a.v, i...))
     getindex_disk!(aout, parent(a.v), pinds...)
 end
-function writeblock!(a::SubDiskArray, v, i::OrdinalRange...)
+function writeblock!(a::AbstractSubDiskArray, v, i::OrdinalRange...)
     pinds = parentindices(view(a.v, i...))
     setindex_disk!(parent(a.v), v, pinds...)
 end
-haschunks(a::SubDiskArray) = haschunks(parent(a.v))
-eachchunk(a::SubDiskArray) = eachchunk_view(haschunks(a.v.parent), a.v)
+haschunks(a::AbstractSubDiskArray) = haschunks(parent(a.v))
+eachchunk(a::AbstractSubDiskArray) = eachchunk_view(haschunks(a.v.parent), a.v)
 
 function eachchunk_view(::Chunked, vv)
     pinds = parentindices(vv)
