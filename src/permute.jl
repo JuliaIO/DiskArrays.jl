@@ -1,46 +1,52 @@
 """
-    PermutedDiskArray <: AbstractDiskArray
+    AbstractPermutedDiskArray <: AbstractDiskArray
+
+Abstract supertype for diskarray with permuted dimensions.
+"""
+abstract type AbstractPermutedDiskArray{T,N,P<:PermutedDimsArray{T,N}} <: AbstractDiskArray{T,N} end
+
+"""
+    PermutedDiskArray <: AbstractPermutedDiskArray
 
 A lazily permuted disk array returned by `permutedims(diskarray, permutation)`.
 """
-struct PermutedDiskArray{T,N,P<:PermutedDimsArray{T,N}} <: AbstractDiskArray{T,N}
+struct PermutedDiskArray{T,N,P<:PermutedDimsArray{T,N}} <: AbstractPermutedDiskArray{T,N,P}
     a::P
 end
 
 # Base methods
-
-Base.size(a::PermutedDiskArray) = size(a.a)
-
+Base.size(a::AbstractPermutedDiskArray) = size(a.a)
+Base.parent(a::AbstractPermutedDiskArray) = a.a.parent
 # DiskArrays interface
 
-haschunks(a::PermutedDiskArray) = haschunks(a.a.parent)
-function eachchunk(a::PermutedDiskArray)
+haschunks(a::AbstractPermutedDiskArray) = haschunks(parent(a))
+function eachchunk(a::AbstractPermutedDiskArray)
     # Get the parent chunks
-    gridchunks = eachchunk(a.a.parent)
-    perm = _getperm(a.a)
+    gridchunks = eachchunk(parent(a))
+    perm = _getperm(a)
     # Return permuted GridChunks
     return GridChunks(genperm(gridchunks.chunks, perm)...)
 end
-function DiskArrays.readblock!(a::PermutedDiskArray, aout, i::OrdinalRange...)
+function DiskArrays.readblock!(a::AbstractPermutedDiskArray, aout, i::OrdinalRange...)
     iperm = _getiperm(a)
     # Permute the indices
     inew = genperm(i, iperm)
     # Permute the dest block and read from the true parent
-    DiskArrays.readblock!(a.a.parent, PermutedDimsArray(aout, iperm), inew...)
+    DiskArrays.readblock!(parent(a), PermutedDimsArray(aout, iperm), inew...)
     return nothing
 end
-function DiskArrays.writeblock!(a::PermutedDiskArray, v, i::OrdinalRange...)
+function DiskArrays.writeblock!(a::AbstractPermutedDiskArray, v, i::OrdinalRange...)
     iperm = _getiperm(a)
     inew = genperm(i, iperm)
     # Permute the dest block and write from the true parent
-    DiskArrays.writeblock!(a.a.parent, PermutedDimsArray(v, iperm), inew...)
+    DiskArrays.writeblock!(parent(a), PermutedDimsArray(v, iperm), inew...)
     return nothing
 end
 
-_getperm(a::PermutedDiskArray) = _getperm(a.a)
+_getperm(a::AbstractPermutedDiskArray) = _getperm(a.a)
 _getperm(::PermutedDimsArray{<:Any,<:Any,perm}) where {perm} = perm
 
-_getiperm(a::PermutedDiskArray) = _getiperm(a.a)
+_getiperm(a::AbstractPermutedDiskArray) = _getiperm(a.a)
 _getiperm(::PermutedDimsArray{<:Any,<:Any,<:Any,iperm}) where {iperm} = iperm
 
 # Implementaion macros
