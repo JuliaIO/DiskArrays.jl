@@ -1,4 +1,3 @@
-
 """
     ConcatDiskArray <: AbstractDiskArray
     
@@ -15,7 +14,7 @@ Returned from `cat` on disk arrays.
 
 It is also useful on its own as it can easily concatenate an array of disk arrays.
 """
-struct ConcatDiskArray{T,N,P,C,HC,ID} <: AbstractDiskArray{T,N}
+struct ConcatDiskArray{T,N,P,C,HC, ID} <: AbstractDiskArray{T,N}
     parents::P
     startinds::NTuple{N,Vector{Int}}
     size::NTuple{N,Int}
@@ -24,23 +23,25 @@ struct ConcatDiskArray{T,N,P,C,HC,ID} <: AbstractDiskArray{T,N}
     innerdims::Val{ID}
 end
 
-function ConcatDiskArray(arrays::AbstractArray{Union{<:AbstractArray,Missing}})
+function ConcatDiskArray(arrays::AbstractArray{Union{<:AbstractArray,Missing}}; fill=missing)
     et = Base.nonmissingtype(eltype(arrays))
-    T = Union{Missing,eltype(et)}
+    T = promotetype(typeof(fill), eltype(et))
     N = ndims(arrays)
     M = ndims(et)
     _ConcatDiskArray(arrays, T, Val(N), Val(M))
 end
+
 function infer_eltypes(arrays)
     foldl(arrays, init=(-1, Union{})) do (M, T), a
-        if ismissing(a)
-            (M, promote_type(Missing, T))
+        if !isa(a, AbstractArray)
+            (M, promote_type(typeof(a), T))
         else
             M == -1 || ndims(a) == M || throw(ArgumentError("All arrays to concatenate must have equal ndims"))
             (ndims(a), promote_type(eltype(a), T))
         end
     end
 end
+
 function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray})
     N = ndims(arrays)
     T = eltype(eltype(arrays))
@@ -90,7 +91,7 @@ function arraysize_and_startinds(arrays1)
     sizes = map(i -> zeros(Int, i), size(arrays1))
     for i in CartesianIndices(arrays1)
         ai = arrays1[i]
-        ismissing(ai) && continue
+        !isa(ai, AbstractArray) && continue
         sizecur = extenddims(size(ai), size(arrays1), 1)
         foreach(sizecur, i.I, sizes) do si, ind, sizeall
             if sizeall[ind] == 0
@@ -123,10 +124,11 @@ function readblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     # Find affected blocks and indices in blocks
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
         vout = view(aout, outer_range...)
-        if ismissing(I)
-            vout .= missing
-        else
+        #@show size(vout)
+        if I isa CartesianIndex
             readblock!(a.parents[I], vout, array_range...)
+        else 
+            vout .= I
         end
     end
 end
@@ -170,10 +172,10 @@ function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
         #Shorten array range to shape of actual array
         array_range = ntuple(j -> array_range[j], ID)
         outer_range = fix_outerrangeshape(outer_range, array_range)
-        if ismissing(myar)
-            f(outer_range, array_range, missing)
-        else
+        if myar isa AbstractArray
             f(outer_range, array_range, cI)
+        else
+            f(outer_range, array_range, myar)
         end
     end
 end
@@ -189,13 +191,13 @@ function concat_chunksize(parents)
     newchunks = map(s -> Vector{Union{RegularChunks,IrregularChunks}}(undef, s), size(parents))
     for i in CartesianIndices(parents)
         array = parents[i]
-        ismissing(array) && continue
+        !isa(array,AbstractArray) && continue
         chunks = eachchunk(array)
         foreach(chunks.chunks, i.I, newchunks) do c, ind, newc
             if !isassigned(newc, ind)
                 newc[ind] = c
             elseif c != newc[ind]
-                throw(ArgumentError("Chunk sizes don't forma grid"))
+                throw(ArgumentError("Chunk sizes don't form a grid"))
             end
         end
     end
