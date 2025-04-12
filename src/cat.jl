@@ -91,7 +91,7 @@ function arraysize_and_startinds(arrays1)
     sizes = map(i -> zeros(Int, i), size(arrays1))
     for i in CartesianIndices(arrays1)
         ai = arrays1[i]
-        !isa(ai, AbstractArray) && continue
+        ai isa AbstractArray || continue
         sizecur = extenddims(size(ai), size(arrays1), 1)
         foreach(sizecur, i.I, sizes) do si, ind, sizeall
             if sizeall[ind] == 0
