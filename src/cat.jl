@@ -124,7 +124,6 @@ function readblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     # Find affected blocks and indices in blocks
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
         vout = view(aout, outer_range...)
-        #@show size(vout)
         if I isa CartesianIndex
             readblock!(a.parents[I], vout, array_range...)
         else 
