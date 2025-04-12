@@ -23,9 +23,9 @@ struct ConcatDiskArray{T,N,P,C,HC, ID} <: AbstractDiskArray{T,N}
     innerdims::Val{ID}
 end
 
-function ConcatDiskArray(arrays::AbstractArray{Union{<:AbstractArray,Missing}}; fill=missing)
+function ConcatDiskArray(arrays::AbstractArray{Union{<:AbstractArray,Missing}})
     et = Base.nonmissingtype(eltype(arrays))
-    T = promotetype(typeof(fill), eltype(et))
+    T = Union{Missing,eltype(et)}
     N = ndims(arrays)
     M = ndims(et)
     _ConcatDiskArray(arrays, T, Val(N), Val(M))
@@ -190,7 +190,7 @@ function concat_chunksize(parents)
     newchunks = map(s -> Vector{Union{RegularChunks,IrregularChunks}}(undef, s), size(parents))
     for i in CartesianIndices(parents)
         array = parents[i]
-        !isa(array,AbstractArray) && continue
+        array isa AbstractArray || continue
         chunks = eachchunk(array)
         foreach(chunks.chunks, i.I, newchunks) do c, ind, newc
             if !isassigned(newc, ind)
