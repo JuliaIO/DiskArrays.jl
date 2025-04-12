@@ -492,6 +492,34 @@ end
         @test slic == Float64[1, 2, 3, 4, 1, 2, 3, 4]
     end
 
+    @testset "Concat DiskArray with fill zero tiles" begin
+        a = zeros(Int, 3, 4)
+        b = ones(Int, 2, 4)
+        c = fill(2, 3, 5)
+        d = fill(0, 2, 5)
+        aconc = DiskArrays.ConcatDiskArray(reshape([a, b, c, 0], 2, 2))
+        abase = [a c; b d]
+        @test all(isequal.(aconc[:, :], abase))
+        @test all(isequal.(aconc[3:4, 4:6], abase[3:4, 4:6]))
+        ch = DiskArrays.eachchunk(aconc)
+        @test ch.chunks[1] == [1:3, 4:5]
+        @test ch.chunks[2] == [1:4, 5:9]
+
+        a = ones(100, 50)
+        b = [rem(i.I[3], 5) == 0 ? 0 : a for i in CartesianIndices((1, 1, 100))]
+        b[1] = 0
+        a_conc = DiskArrays.ConcatDiskArray(b)
+        ch = eachchunk(a_conc)
+        @test ch.chunks[1] == [1:100]
+        @test ch.chunks[2] == [1:50]
+        @test ch.chunks[3] === DiskArrays.RegularChunks(1, 0, 100)
+
+        @test all(isequal.(a_conc[2, 2, 1:5], [0, 1.0, 1.0, 1.0, 0]))
+        @test all(isequal.(a_conc[end, end, 95:100], [0, 1.0, 1.0, 1.0, 1.0, 0]))
+
+    end
+
+
     @testset "Concat DiskArray with missing tiles" begin
         a = zeros(Int, 3, 4)
         b = ones(Int, 2, 4)
@@ -518,6 +546,7 @@ end
         @test all(isequal.(a_conc[end, end, 95:100], [missing, 1.0, 1.0, 1.0, 1.0, missing]))
 
     end
+
 end
 
 @testset "Broadcast with length 1 and 0 final dim" begin
