@@ -29,7 +29,7 @@ Internal `getindex` for disk arrays.
 Converts indices to ranges and calls `DiskArrays.readblock!`
 """
 function getindex_disk(a::AbstractArray, i::Union{Integer,CartesianIndex}...)
-    checkscalar(i)
+    checkscalar(a, i)
     checkbounds(a, i...)
     # Use a 1 x 1 block
     outputarray = Array{eltype(a)}(undef, map(_ -> 1, size(a))...)
@@ -44,7 +44,7 @@ function getindex_disk(a::AbstractArray, i::Union{Integer,CartesianIndex}...)
     return only(outputarray)
 end
 function getindex_disk(a::AbstractArray, i::Integer)
-    checkscalar(i)
+    checkscalar(a, i)
     checkbounds(a, i)
     # Use a 1 x 1 block
     outputarray = Array{eltype(a)}(undef, map(_ -> 1, size(a))...)
@@ -121,7 +121,7 @@ Internal `setindex!` for disk arrays.
 Converts indices to ranges and calls `DiskArrays.writeblock!`
 """
 function setindex_disk!(a::AbstractArray{T}, values::T, i...) where {T<:AbstractArray}
-    checkscalar(i)
+    checkscalar(a, i)
     # If values are not an array, wrap them in a vector
     return setindex_disk!(a, [values], i...)
 end

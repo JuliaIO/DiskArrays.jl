@@ -973,6 +973,8 @@ end
         @test ca[:, 3, 1] == ch[:, 3, 1]
         @test ca[:, 200, 1] == ch[:, 200, 1]
         @test ca[200, :, 1] == ch[200, :, 1]
+        # Test scalar indexing is not checked for CachedDiskArray
+        @test ca[200, 1, 1] == ch[200, 1:1, 1][1]
     end
 end
 
