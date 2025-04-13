@@ -22,14 +22,14 @@ end
 @testset "allowscalar" begin
     DiskArrays.allowscalar(false)
     @test DiskArrays.canscalar() == false
-    @test DiskArrays.checkscalar(Bool) == true # Always allowed for zero dimensional
-    @test DiskArrays.checkscalar(Bool, 1, 2, 3) == false
-    @test DiskArrays.checkscalar(Bool, 1, 2:5, :) == true
+    @test DiskArrays.checkscalar(Bool, fill(Int), ()) == true # Always allowed for zero dimensional
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (1, 2, 3)) == false
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (1, 2:5, :)) == true
     DiskArrays.allowscalar(true)
     @test DiskArrays.canscalar() == true
-    @test DiskArrays.checkscalar(Bool) == true
-    @test DiskArrays.checkscalar(Bool, 1, 2, 3) == true
-    @test DiskArrays.checkscalar(Bool, :, 2:5, 3) == true
+    @test DiskArrays.checkscalar(Bool, fill(Int), ()) == true
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (1, 2, 3)) == true
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (:, 2:5, 3)) == true
     a = AccessCountDiskArray(reshape(1:24, 2, 3, 4), chunksize=(2, 2, 2))
     @test a[1, 2, 3] == 15
     @test a[1, 2, 3, 1] == 15

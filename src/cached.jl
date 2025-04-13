@@ -51,7 +51,8 @@ function CachedDiskArray(A::AbstractArray{T,N}; maxsize=1000, mmap=false) where 
 end
 
 # Scalar indexing is allowed on CachedDiskArray
-checkscalar(::Type{Bool}, a::CachedDiskArray, i::Integer...) = true
+checkscalar(::Type{Bool}, a::CachedDiskArray, i::Tuple) = true
+checkscalar(::Type{Bool}, a::CachedDiskArray, i::Tuple{}) = true
 
 Base.parent(A::CachedDiskArray) = A.parent
 Base.size(A::CachedDiskArray) = size(parent(A))
