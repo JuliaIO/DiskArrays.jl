@@ -50,6 +50,10 @@ function CachedDiskArray(A::AbstractArray{T,N}; maxsize=1000, mmap=false) where 
     CachedDiskArray(A, LRU{ChunkIndex{N,OffsetChunks},OffsetArray{T,N,Array{T,N}}}(; by, maxsize),mmap)
 end
 
+# Scalar indexing is allowed on CachedDiskArray
+checkscalar(::Type{Bool}, a::CachedDiskArray, i::Tuple) = true
+checkscalar(::Type{Bool}, a::CachedDiskArray, i::Tuple{}) = true
+
 Base.parent(A::CachedDiskArray) = A.parent
 Base.size(A::CachedDiskArray) = size(parent(A))
 # TODO we need to invalidate caches when we write
