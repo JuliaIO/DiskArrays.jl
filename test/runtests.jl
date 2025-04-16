@@ -4,6 +4,7 @@ using DiskArrays.TestTypes
 using Test
 using Statistics
 using Aqua
+using ConstructionBase
 using TraceFuns, Suppressor
 
 # Run with any code changes
@@ -818,15 +819,20 @@ import Base.PermutedDimsArrays.invperm
     ip = invperm(p)
     a = permutedims(AccessCountDiskArray(permutedims(reshape(1:20, 4, 5, 1), ip)), p)
     test_getindex(a)
-    a = permutedims(AccessCountDiskArray(zeros(Int, 5, 1, 4)), p)
+    a = PermutedDimsArray(AccessCountDiskArray(zeros(Int, 5, 1, 4)), p)
     test_setindex(a)
     a = permutedims(AccessCountDiskArray(zeros(Int, 5, 1, 4)), p)
     test_view(a)
-    a = data -> permutedims(AccessCountDiskArray(permutedims(data, ip); chunksize=(4, 2, 5)), p)
-    test_reductions(a)
+    f = data -> permutedims(AccessCountDiskArray(permutedims(data, ip); chunksize=(4, 2, 5)), p)
+    test_reductions(f)
     a_disk1 = permutedims(AccessCountDiskArray(rand(9, 2, 10); chunksize=(3, 2, 5)), p)
     test_broadcast(a_disk1)
-    @test PermutedDiskArray(a_disk1.a) === a_disk1
+
+    @testset "ConstructionBase works on PermutedDiskArray" begin
+        v = ones(Int, 10, 2, 2)
+        av = ConstructionBase.setproperties(a, (; parent=v))
+        @test parent(av) === v
+    end
 end
 
 @testset "Unchunked String arrays" begin
