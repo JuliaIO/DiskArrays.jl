@@ -98,7 +98,12 @@ Calculate indices for `i` the first chunk/s in `chunks`
 Returns a [`DiskIndex`](@ref), and the remaining chunks.
 """
 process_index(i, chunks, ::NoBatch) = process_index(i, chunks)
-process_index(inow::Integer, chunks) = DiskIndex((), (1,), (), (1,), (inow:inow,)), Base.tail(chunks)
+function process_index(I::CartesianIndex, chunks, bs::NoBatch)
+    _, chunksrem = splitchunks(I, chunks)
+    DiskIndex((), (1, 1), (), (1, 1), map(i -> i:i, Tuple(I))), chunksrem
+end
+process_index(inow::Integer, chunks) = 
+    DiskIndex((), (1,), (), (1,), (inow:inow,)), Base.tail(chunks)
 function process_index(::Colon, chunks)
     s = arraysize_from_chunksize(first(chunks))
     DiskIndex((s,), (s,), (Colon(),), (Colon(),), (1:s,),), Base.tail(chunks)
