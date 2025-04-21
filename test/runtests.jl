@@ -53,6 +53,7 @@ end
 function test_getindex(a)
     @test a[2, 3, 1] == 10
     @test a[CartesianIndex(2, 3), 1] == 10
+    @test a[2, CartesianIndex(3,), 1] == 10
     @test a[CartesianIndex(2, 3, 1)] == 10
     @test a[2, CartesianIndex(3, 1)] == 10
     @test a[2, 3] == 10
@@ -66,7 +67,7 @@ function test_getindex(a)
     @test a[:, 3, 1, [1]] == reshape(9:12, 4, 1)
     @test a[:, CartesianIndex(3, 1), [1]] == reshape(9:12, 4, 1)
     @test a[CartesianIndices((1:2, 1:2)), 1] == [1 5; 2 6]
-    @test getindex_count(a) == 15
+    @test getindex_count(a) == 16
     # Test bitmask indexing
     m = falses(4, 5, 1)
     m[2, [1, 2, 3, 5], 1] .= true
@@ -124,11 +125,12 @@ function test_view(a)
     v[1:2, 1] = [1, 2]
     v[1:2, 2:3] = [4 4; 4 4]
     @test v[1:2, 1] == [1, 2]
-    @test v[1:2, 1] == [1, 2]
+    @test v[1:2, CartesianIndex(1,)] == [1, 2]
+    @test v[1:2, CartesianIndex(1, 1)] == [1, 2]
     @test v[1:2, 2:3] == [4 4; 4 4]
     @test trueparent(a)[2:3, 2] == [1, 2]
     @test trueparent(a)[2:3, 3:4] == [4 4; 4 4]
-    @test getindex_count(a) == 2
+    @test getindex_count(a) == 4
     @test setindex_count(a) == 2
 
     v2 = view(a, 2:3, 2:4, Int[])

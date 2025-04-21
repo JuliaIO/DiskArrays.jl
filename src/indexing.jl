@@ -202,7 +202,7 @@ end
 Generate an `Array` to pass to `readblock!`
 """
 function create_outputarray(out::AbstractArray, a::AbstractArray, output_size::Tuple)
-    size(out) == output_size || throw(ArgumentError("Expected output array size of $output_size"))
+    size(out) == output_size || throw(ArgumentError("Expected output array size of $output_size, got $(size(out))"))
     return out
 end
 create_outputarray(::Nothing, a::AbstractArray, output_size::Tuple) =
