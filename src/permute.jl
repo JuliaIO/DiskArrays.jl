@@ -15,8 +15,9 @@ struct PermutedDiskArray{T,N,P<:PermutedDimsArray{T,N}} <: AbstractPermutedDiskA
 end
 
 # Base methods
-Base.size(a::AbstractPermutedDiskArray) = size(a.a)
-Base.parent(a::AbstractPermutedDiskArray) = a.a.parent
+permuteddimsarray(a) = a.a
+Base.size(a::AbstractPermutedDiskArray) = size(permuteddimsarray(a))
+Base.parent(a::AbstractPermutedDiskArray) = parent(permuteddimsarray(a))
 # DiskArrays interface
 
 haschunks(a::AbstractPermutedDiskArray) = haschunks(parent(a))
@@ -43,10 +44,10 @@ function DiskArrays.writeblock!(a::AbstractPermutedDiskArray, v, i::OrdinalRange
     return nothing
 end
 
-_getperm(a::AbstractPermutedDiskArray) = _getperm(a.a)
+_getperm(a::AbstractPermutedDiskArray) = _getperm(permuteddimsarray(a))
 _getperm(::PermutedDimsArray{<:Any,<:Any,perm}) where {perm} = perm
 
-_getiperm(a::AbstractPermutedDiskArray) = _getiperm(a.a)
+_getiperm(a::AbstractPermutedDiskArray) = _getiperm(permuteddimsarray(a))
 _getiperm(::PermutedDimsArray{<:Any,<:Any,<:Any,iperm}) where {iperm} = iperm
 
 # Implementaion macros
