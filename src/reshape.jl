@@ -9,11 +9,10 @@ Abstract supertype for a replacements of `Base.ReshapedArray` for `AbstractDiskA
 abstract type AbstractReshapedDiskArray{T,N,P,M} <: AbstractDiskArray{T,N} end
 
 """
-    ReshapedDiskArray <: AbstractDiskArray
+    ReshapedDiskArray <: AbstractReshapedDiskArray
 
 A replacement for `Base.ReshapedArray` for disk arrays,
 returned by `reshape`.
-
 
 Reshaping is really not trivial, because the access pattern would 
 completely change for reshaped arrays, rectangles would not remain 
