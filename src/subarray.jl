@@ -44,12 +44,13 @@ function eachchunk_view(::Chunked, vv)
 end
 eachchunk_view(::Unchunked, a) = estimate_chunksize(a)
 
-function view_disk(a, I...)
-    # Modified from Base.view
+function view_disk(A, I...)
     @inline
-    @boundscheck checkbounds(a, I...)
-    I′ = Base.rm_singleton_indices(ntuple(Returns(true), Val(ndims(a))), I...)
-    SubDiskArray(Base.unsafe_view(a, I′...))
+    # Modified from Base.view
+    J = to_indices(A, I)
+    @boundscheck checkbounds(A, J...)
+    J′ = Base.rm_singleton_indices(ntuple(Returns(true), Val(ndims(A))), J...)
+    SubDiskArray(Base.unsafe_view(A, J′...))
 end
 
 # Implementaion macro
