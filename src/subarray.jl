@@ -55,6 +55,7 @@ end
 
 # Implementaion macro
 macro implement_subarray(t)
+    t = esc(t)
     quote
         @inline Base.view(a::$t, i...) = view_disk(a, i...)
         Base.vec(a::$t) = view(a, :)
