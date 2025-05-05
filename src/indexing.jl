@@ -56,6 +56,10 @@ function getindex_disk(a::AbstractArray, i::Integer)
     return only(outputarray)
 end
 getindex_disk(a::AbstractArray, i...) = getindex_disk!(nothing, a, i...)
+getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OneBasedChunks}) =
+    a[eachchunk(a)[i.I]...]
+getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OffsetChunks}) =
+    wrapchunk(a[nooffset(i)], eachchunk(a)[i.I])
 
 function getindex_disk!(out::Union{Nothing,AbstractArray}, a::AbstractArray, i...)
     # Check if we can write once or need to use multiple batches
@@ -306,10 +310,6 @@ macro implement_getindex(t)
     quote
         DiskArrays.isdisk(::Type{<:$t}) = true
         Base.getindex(a::$t, i...) = getindex_disk(a, i...)
-        @inline Base.getindex(a::$t, i::ChunkIndex{<:Any,OneBasedChunks}) =
-            a[eachchunk(a)[i.I]...]
-        @inline Base.getindex(a::$t, i::ChunkIndex{<:Any,OffsetChunks}) =
-            wrapchunk(a[nooffset(i)], eachchunk(a)[i.I])
         function DiskArrays.ChunkIndices(a::$t; offset=false)
             return ChunkIndices(
                 map(s -> 1:s, size(eachchunk(a))), offset ? OffsetChunks() : OneBasedChunks()
