@@ -1,32 +1,44 @@
 """
     SubDiskArray <: AbstractDiskArray
 
+Abstract supertype for a view of an AbstractDiskArray
+"""
+abstract type AbstractSubDiskArray{T,N,P,I,L} <: AbstractDiskArray{T,N} end
+
+"""
+    SubDiskArray <: AbstractDiskArray
+
 A replacement for `Base.SubArray` for disk arrays, returned by `view`.
 """
-struct SubDiskArray{T,N,P,I,L} <: AbstractDiskArray{T,N}
+struct SubDiskArray{T,N,P,I,L} <: AbstractSubDiskArray{T,N,P,I,L}
     v::SubArray{T,N,P,I,L}
 end
 
 # Base methods
-Base.view(a::SubDiskArray, i...) = SubDiskArray(view(a.v, i...))
-Base.view(a::SubDiskArray, i::CartesianIndices) = view(a, i.indices...)
-Base.size(a::SubDiskArray) = size(a.v)
-Base.parent(a::SubDiskArray) = a.v.parent
+subarray(a::SubDiskArray) = a.v
+function Base.view(a::T, i...) where T<:AbstractSubDiskArray 
+    basetype = Base.typename(T).wrapper
+    basetype(view(subarray(a), i...))
+end
+Base.view(a::AbstractSubDiskArray, i::CartesianIndices) = view(a, i.indices...)
+Base.size(a::AbstractSubDiskArray) = size(subarray(a))
+Base.parent(a::AbstractSubDiskArray) = parent(subarray(a))
+Base.parentindices(a::AbstractSubDiskArray) = parentindices(subarray(a))
 
 _replace_colon(s, ::Colon) = Base.OneTo(s)
 _replace_colon(s, r) = r
 
 # Diskarrays.jl interface
-function readblock!(a::SubDiskArray, aout, i::OrdinalRange...)
-    pinds = parentindices(view(a.v, i...))
-    getindex_disk!(aout, parent(a.v), pinds...)
+function readblock!(a::AbstractSubDiskArray, aout, i::OrdinalRange...)
+    pinds = parentindices(view(a, i...))
+    getindex_disk!(aout, parent(a), pinds...)
 end
-function writeblock!(a::SubDiskArray, v, i::OrdinalRange...)
-    pinds = parentindices(view(a.v, i...))
-    setindex_disk!(parent(a.v), v, pinds...)
+function writeblock!(a::AbstractSubDiskArray, v, i::OrdinalRange...)
+    pinds = parentindices(view(a, i...))
+    setindex_disk!(parent(a), v, pinds...)
 end
-haschunks(a::SubDiskArray) = haschunks(parent(a.v))
-eachchunk(a::SubDiskArray) = eachchunk_view(haschunks(a.v.parent), a.v)
+haschunks(a::AbstractSubDiskArray) = haschunks(parent(a))
+eachchunk(a::AbstractSubDiskArray) = eachchunk_view(haschunks(parent(a)), a)
 
 function eachchunk_view(::Chunked, vv)
     pinds = parentindices(vv)
