@@ -4,6 +4,7 @@ using DiskArrays.TestTypes
 using Test
 using Statistics
 using Aqua
+using ConstructionBase
 using TraceFuns, Suppressor
 
 # Run with any code changes
@@ -22,14 +23,14 @@ end
 @testset "allowscalar" begin
     DiskArrays.allowscalar(false)
     @test DiskArrays.canscalar() == false
-    @test DiskArrays.checkscalar(Bool) == true # Always allowed for zero dimensional
-    @test DiskArrays.checkscalar(Bool, 1, 2, 3) == false
-    @test DiskArrays.checkscalar(Bool, 1, 2:5, :) == true
+    @test DiskArrays.checkscalar(Bool, fill(Int), ()) == true # Always allowed for zero dimensional
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (1, 2, 3)) == false
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (1, 2:5, :)) == true
     DiskArrays.allowscalar(true)
     @test DiskArrays.canscalar() == true
-    @test DiskArrays.checkscalar(Bool) == true
-    @test DiskArrays.checkscalar(Bool, 1, 2, 3) == true
-    @test DiskArrays.checkscalar(Bool, :, 2:5, 3) == true
+    @test DiskArrays.checkscalar(Bool, fill(Int), ()) == true
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (1, 2, 3)) == true
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (:, 2:5, 3)) == true
     a = AccessCountDiskArray(reshape(1:24, 2, 3, 4), chunksize=(2, 2, 2))
     @test a[1, 2, 3] == 15
     @test a[1, 2, 3, 1] == 15
@@ -818,15 +819,20 @@ import Base.PermutedDimsArrays.invperm
     ip = invperm(p)
     a = permutedims(AccessCountDiskArray(permutedims(reshape(1:20, 4, 5, 1), ip)), p)
     test_getindex(a)
-    a = permutedims(AccessCountDiskArray(zeros(Int, 5, 1, 4)), p)
+    a = PermutedDimsArray(AccessCountDiskArray(zeros(Int, 5, 1, 4)), p)
     test_setindex(a)
     a = permutedims(AccessCountDiskArray(zeros(Int, 5, 1, 4)), p)
     test_view(a)
-    a = data -> permutedims(AccessCountDiskArray(permutedims(data, ip); chunksize=(4, 2, 5)), p)
-    test_reductions(a)
+    f = data -> permutedims(AccessCountDiskArray(permutedims(data, ip); chunksize=(4, 2, 5)), p)
+    test_reductions(f)
     a_disk1 = permutedims(AccessCountDiskArray(rand(9, 2, 10); chunksize=(3, 2, 5)), p)
     test_broadcast(a_disk1)
-    @test PermutedDiskArray(a_disk1.a) === a_disk1
+
+    @testset "ConstructionBase works on PermutedDiskArray" begin
+        v = ones(Int, 10, 2, 2)
+        av = ConstructionBase.setproperties(a, (; parent=v))
+        @test parent(av) === v
+    end
 end
 
 @testset "Unchunked String arrays" begin
@@ -973,6 +979,8 @@ end
         @test ca[:, 3, 1] == ch[:, 3, 1]
         @test ca[:, 200, 1] == ch[:, 200, 1]
         @test ca[200, :, 1] == ch[200, :, 1]
+        # Test scalar indexing is not checked for CachedDiskArray
+        @test ca[200, 1, 1] == ch[200, 1:1, 1][1]
     end
 end
 

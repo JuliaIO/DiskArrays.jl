@@ -1,5 +1,7 @@
 module DiskArrays
 
+import ConstructionBase
+
 using LRUCache: LRUCache, LRU
 
 # Use the README as the module docs

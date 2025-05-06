@@ -24,11 +24,11 @@ canscalar() = ALLOWSCALAR[]
 
 # Checks if an index is scalar at all, and then if scalar indexing is allowed. 
 # Syntax as for `checkbounds`.
-checkscalar(::Type{Bool}) = true # Handle 0 dimensional
-checkscalar(::Type{Bool}, I::Tuple) = checkscalar(Bool, I...)
-checkscalar(::Type{Bool}, I...) = !all(map(i -> i isa Int, I)) || canscalar()
-checkscalar(I::Tuple) = checkscalar(I...)
-checkscalar(I...) = checkscalar(Bool, I...) || _scalar_error()
+checkscalar(::Type{Bool}, A::AbstractArray, ::Tuple{}) = true # Handle 0 dimensional
+checkscalar(::Type{Bool}, A::AbstractArray, I::Tuple) = !all(map(i -> i isa Int, I)) || canscalar()
+checkscalar(::Type{Bool}, A::AbstractArray, I...) = checkscalar(Bool, A, (I...,))
+checkscalar(A::AbstractArray, I::Tuple) = checkscalar(Bool, A, I::Tuple) || _scalar_error()
+checkscalar(A::AbstractArray, I...) = checkscalar(A, I)
 
 function _scalar_error()
     return error(

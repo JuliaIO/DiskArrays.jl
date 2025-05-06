@@ -1,5 +1,4 @@
 import Base: _throw_dmrs
-import Base.PermutedDimsArrays: genperm
 
 """
     AbstractReshapedDiskArray <: AbstractDiskArray
@@ -30,6 +29,7 @@ end
 # Base methods
 Base.size(r::AbstractReshapedDiskArray) = r.newsize
 Base.parent(r::AbstractReshapedDiskArray) = r.parent
+
 keepdim(r::AbstractReshapedDiskArray) = r.keepdim
 
 # DiskArrays interface
