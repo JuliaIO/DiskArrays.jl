@@ -44,7 +44,7 @@ function eachchunk_view(::Chunked, vv)
 end
 eachchunk_view(::Unchunked, a) = estimate_chunksize(a)
 
-# Implementaion macro
+# Implementation macro
 
 macro implement_subarray(t)
     t = esc(t)
