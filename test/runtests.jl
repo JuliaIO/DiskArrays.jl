@@ -497,17 +497,18 @@ end
         b = ones(Int, 2, 4)
         c = fill(2, 3, 5)
         d = fill(0, 2, 5)
-        aconc = DiskArrays.ConcatDiskArray(reshape([a, b, c, 0], 2, 2))
+        aconc = DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile(0)], 2, 2))
         abase = [a c; b d]
         @test all(isequal.(aconc[:, :], abase))
         @test all(isequal.(aconc[3:4, 4:6], abase[3:4, 4:6]))
         ch = DiskArrays.eachchunk(aconc)
         @test ch.chunks[1] == [1:3, 4:5]
         @test ch.chunks[2] == [1:4, 5:9]
+        @test eltype(aconc) == Int
 
         a = ones(100, 50)
-        b = [rem(i.I[3], 5) == 0 ? 0 : a for i in CartesianIndices((1, 1, 100))]
-        b[1] = 0
+        b = [rem(i.I[3], 5) == 0 ? DiskArrays.MissingTile(0) : a for i in CartesianIndices((1, 1, 100))]
+        b[1] = DiskArrays.MissingTile(0)
         a_conc = DiskArrays.ConcatDiskArray(b)
         ch = eachchunk(a_conc)
         @test ch.chunks[1] == [1:100]
@@ -525,17 +526,18 @@ end
         b = ones(Int, 2, 4)
         c = fill(2, 3, 5)
         d = fill(missing, 2, 5)
-        aconc = DiskArrays.ConcatDiskArray(reshape([a, b, c, missing], 2, 2))
+        aconc = DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile(missing)], 2, 2))
         abase = [a c; b d]
         @test all(isequal.(aconc[:, :], abase))
         @test all(isequal.(aconc[3:4, 4:6], abase[3:4, 4:6]))
         ch = DiskArrays.eachchunk(aconc)
         @test ch.chunks[1] == [1:3, 4:5]
         @test ch.chunks[2] == [1:4, 5:9]
+        @test eltype(aconc) == Union{Int, Missing}
 
         a = ones(100, 50)
-        b = [rem(i.I[3], 5) == 0 ? missing : a for i in CartesianIndices((1, 1, 100))]
-        b[1] = missing
+        b = [rem(i.I[3], 5) == 0 ? DiskArrays.MissingTile(missing) : a for i in CartesianIndices((1, 1, 100))]
+        b[1] = DiskArrays.MissingTile(missing)
         a_conc = DiskArrays.ConcatDiskArray(b)
         ch = eachchunk(a_conc)
         @test ch.chunks[1] == [1:100]
@@ -544,6 +546,34 @@ end
 
         @test all(isequal.(a_conc[2, 2, 1:5], [missing, 1.0, 1.0, 1.0, missing]))
         @test all(isequal.(a_conc[end, end, 95:100], [missing, 1.0, 1.0, 1.0, 1.0, missing]))
+
+    end
+
+    @testset "Concat DiskArray with fill zero vector tiles" begin
+        a = fill([1,1], 3, 4)
+        b = fill([1,2], 2, 4)
+        c = fill([2,1], 3, 5)
+        d = fill([2,2], 2, 5)
+        aconc = DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile([2,2])], 2, 2))
+        abase = [a c; b d]
+        @test all(isequal.(aconc[:, :], abase))
+        @test all(isequal.(aconc[3:4, 4:6], abase[3:4, 4:6]))
+        ch = DiskArrays.eachchunk(aconc)
+        @test ch.chunks[1] == [1:3, 4:5]
+        @test ch.chunks[2] == [1:4, 5:9]
+        @test eltype(aconc) == Vector{Int}
+
+        a = fill([1,1], 100, 50)
+        b = [rem(i.I[3], 5) == 0 ? DiskArrays.MissingTile([0,0]) : a for i in CartesianIndices((1, 1, 100))]
+        b[1] = DiskArrays.MissingTile([0,0])
+        a_conc = DiskArrays.ConcatDiskArray(b)
+        ch = eachchunk(a_conc)
+        @test ch.chunks[1] == [1:100]
+        @test ch.chunks[2] == [1:50]
+        @test ch.chunks[3] === DiskArrays.RegularChunks(1, 0, 100)
+
+        @test all(isequal.(a_conc[2, 2, 1:5], [[0,0], [1,1],[1,1] , [1,1], [0,0]]))
+        @test all(isequal.(a_conc[end, end, 95:100], [[0,0], [1,1], [1,1], [1,1],[1,1], [0,0]]))
 
     end
 
@@ -958,8 +988,10 @@ struct TestArray{T,N} <: AbstractArray{T,N} end
     DiskArrays.@implement_array_methods TestArray
     DiskArrays.@implement_permutedims TestArray
     DiskArrays.@implement_subarray TestArray
-    DiskArrays.@implement_diskarray TestArray
     @test DiskArrays.isdisk(TestArray) == true
+    DiskArrays.@implement_diskarray TestArray2
+    @test DiskArrays.isdisk(TestArray2) == true
+
 end
 
 # issue #123
