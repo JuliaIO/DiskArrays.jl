@@ -112,9 +112,10 @@ Calculate indices for `i` the first chunk/s in `chunks`
 Returns a [`DiskIndex`](@ref), and the remaining chunks.
 """
 process_index(i, chunks, ::NoBatch) = process_index(i, chunks)
-function process_index(I::CartesianIndex, chunks, bs::NoBatch)
-    _, chunksrem = splitchunks(I, chunks)
-    DiskIndex((), (1, 1), (), (1, 1), map(i -> i:i, Tuple(I))), chunksrem
+function process_index(i::CartesianIndex{N}, chunks, ::NoBatch) where {N}
+    _, chunksrem = splitchunks(i, chunks)
+    di = DiskIndex((), map(one, i.I), (), (1,), map(i -> i:i, i.I))
+    return di, chunksrem
 end
 process_index(inow::Integer, chunks) = 
     DiskIndex((), (1,), (), (1,), (inow:inow,)), tail(chunks)
@@ -178,15 +179,10 @@ splitchunks(i::AbstractArray{<:CartesianIndex}, chunks) =
 splitchunks(i::AbstractArray{Bool}, chunks) = splitchunks(size(i), (), chunks)
 splitchunks(i::CartesianIndices, chunks) = splitchunks(i.indices, (), chunks)
 splitchunks(i::CartesianIndex, chunks) = splitchunks(i.I, (), chunks)
-splitchunks(_, chunks) = (first(chunks),), tail(chunks)
+splitchunks(_, chunks) = (first(chunks),), Base.tail(chunks)
 splitchunks(si, chunksnow, chunksrem) =
-    splitchunks(tail(si), (chunksnow..., first(chunksrem)), tail(chunksrem))
-function splitchunks(si, chunksnow, chunksrem::Tuple{})
-    checktrailing(si[1])
-    splitchunks(tail(si), chunksnow, chunksrem)
-end
+    splitchunks(Base.tail(si), (chunksnow..., first(chunksrem)), Base.tail(chunksrem))
 splitchunks(::Tuple{}, chunksnow, chunksrem) = (chunksnow, chunksrem)
-splitchunks(::Tuple{}, chunksnow, chunksrem::Tuple{}) = (chunksnow, chunksrem)
 
 """
     output_aliasing(di::DiskIndex, ndims_dest, ndims_source)
