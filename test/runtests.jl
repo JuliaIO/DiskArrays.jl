@@ -55,7 +55,7 @@ function test_getindex(a)
     @test a[CartesianIndex(2, 3), 1] == 10
     @test a[2, CartesianIndex(3,), 1] == 10
     @test a[CartesianIndex(2, 3, 1)] == 10
-    @test a[2, CartesianIndex(3, 1)] == 10
+    @test a[1:2, CartesianIndex(3, 1, 1)] == 9:10
     @test a[2, 3] == 10
     @test a[CartesianIndex(2, 3)] == 10
     @test a[2, 3, 1, 1] == 10

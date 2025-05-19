@@ -182,7 +182,12 @@ splitchunks(i::CartesianIndex, chunks) = splitchunks(i.I, (), chunks)
 splitchunks(_, chunks) = (first(chunks),), Base.tail(chunks)
 splitchunks(si, chunksnow, chunksrem) =
     splitchunks(Base.tail(si), (chunksnow..., first(chunksrem)), Base.tail(chunksrem))
+function splitchunks(si,chunksnow, ::Tuple{})
+    only(first(si)) == 1 || throw(ArgumentError("Trailing indices must be 1"))
+    splitchunks(Base.tail(si), chunksnow, ())
+end
 splitchunks(::Tuple{}, chunksnow, chunksrem) = (chunksnow, chunksrem)
+splitchunks(::Tuple{}, chunksnow, chunksrem::Tuple{}) = (chunksnow, chunksrem)
 
 """
     output_aliasing(di::DiskIndex, ndims_dest, ndims_source)
