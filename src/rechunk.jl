@@ -4,7 +4,7 @@
     RechunkedDiskArray(parent::AbstractArray, chunks::GridChunks)
 
 A disk array that forces a specific chunk pattern, 
-regardless of the true chunk pattern of the parnet array.
+regardless of the true chunk pattern of the parent array.
 
 This is useful in `zip` and other operations that can iterate
 over multiple arrays with different patterns.
@@ -13,6 +13,20 @@ struct RechunkedDiskArray{T,N,A<:AbstractArray{T,N},C<:GridChunks} <: AbstractDi
     parent::A
     chunks::C
 end
+
+"""
+  rechunk(data::AbstractArray,chunks)
+
+Change the chunks of the underlying DiskArray. Note that this will not change the chunking of the underlying data itself, it will just make the data
+"look" like it had a different chunking. If you need a persistent on-disk representation of this chunking, save the resulting array. 
+
+The chunks argument can take one of the following forms:
+
+•  a DiskArrays.GridChunks object
+
+•  a tuple specifying the chunk size along each dimension
+"""
+rechunk(data::AbstractDiskArray, chunks::GridChunks) = RechunkedDiskArray(data, chunks)
 
 Base.parent(A::RechunkedDiskArray) = A.parent
 Base.size(A::RechunkedDiskArray) = size(parent(A))
