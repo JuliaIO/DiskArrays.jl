@@ -29,7 +29,7 @@ Internal `getindex` for disk arrays.
 Converts indices to ranges and calls `DiskArrays.readblock!`
 """
 function getindex_disk(a::AbstractArray, i::Union{Integer,CartesianIndex}...)
-    checkscalar(i)
+    checkscalar(a, i)
     checkbounds(a, i...)
     # Use a 1 x 1 block
     outputarray = Array{eltype(a)}(undef, map(_ -> 1, size(a))...)
@@ -44,7 +44,7 @@ function getindex_disk(a::AbstractArray, i::Union{Integer,CartesianIndex}...)
     return only(outputarray)
 end
 function getindex_disk(a::AbstractArray, i::Integer)
-    checkscalar(i)
+    checkscalar(a, i)
     checkbounds(a, i)
     # Use a 1 x 1 block
     outputarray = Array{eltype(a)}(undef, map(_ -> 1, size(a))...)
@@ -56,6 +56,10 @@ function getindex_disk(a::AbstractArray, i::Integer)
     return only(outputarray)
 end
 getindex_disk(a::AbstractArray, i...) = getindex_disk!(nothing, a, i...)
+getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OneBasedChunks}) =
+    a[eachchunk(a)[i.I]...]
+getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OffsetChunks}) =
+    wrapchunk(a[nooffset(i)], eachchunk(a)[i.I])
 
 function getindex_disk!(out::Union{Nothing,AbstractArray}, a::AbstractArray, i...)
     # Check if we can write once or need to use multiple batches
@@ -121,7 +125,7 @@ Internal `setindex!` for disk arrays.
 Converts indices to ranges and calls `DiskArrays.writeblock!`
 """
 function setindex_disk!(a::AbstractArray{T}, values::T, i...) where {T<:AbstractArray}
-    checkscalar(i)
+    checkscalar(a, i)
     # If values are not an array, wrap them in a vector
     return setindex_disk!(a, [values], i...)
 end
@@ -202,7 +206,7 @@ end
 Generate an `Array` to pass to `readblock!`
 """
 function create_outputarray(out::AbstractArray, a::AbstractArray, output_size::Tuple)
-    size(out) == output_size || throw(ArgumentError("Expected output array size of $output_size"))
+    size(out) == output_size || throw(ArgumentError("Expected output array size of $output_size, got $(size(out))"))
     return out
 end
 create_outputarray(::Nothing, a::AbstractArray, output_size::Tuple) =
@@ -306,10 +310,6 @@ macro implement_getindex(t)
     quote
         DiskArrays.isdisk(::Type{<:$t}) = true
         Base.getindex(a::$t, i...) = getindex_disk(a, i...)
-        @inline Base.getindex(a::$t, i::ChunkIndex{<:Any,OneBasedChunks}) =
-            a[eachchunk(a)[i.I]...]
-        @inline Base.getindex(a::$t, i::ChunkIndex{<:Any,OffsetChunks}) =
-            wrapchunk(a[nooffset(i)], eachchunk(a)[i.I])
         function DiskArrays.ChunkIndices(a::$t; offset=false)
             return ChunkIndices(
                 map(s -> 1:s, size(eachchunk(a))), offset ? OffsetChunks() : OneBasedChunks()

@@ -4,6 +4,7 @@ using DiskArrays.TestTypes
 using Test
 using Statistics
 using Aqua
+using ConstructionBase
 using TraceFuns, Suppressor
 
 # Run with any code changes
@@ -22,14 +23,14 @@ end
 @testset "allowscalar" begin
     DiskArrays.allowscalar(false)
     @test DiskArrays.canscalar() == false
-    @test DiskArrays.checkscalar(Bool) == true # Always allowed for zero dimensional
-    @test DiskArrays.checkscalar(Bool, 1, 2, 3) == false
-    @test DiskArrays.checkscalar(Bool, 1, 2:5, :) == true
+    @test DiskArrays.checkscalar(Bool, fill(Int), ()) == true # Always allowed for zero dimensional
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (1, 2, 3)) == false
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (1, 2:5, :)) == true
     DiskArrays.allowscalar(true)
     @test DiskArrays.canscalar() == true
-    @test DiskArrays.checkscalar(Bool) == true
-    @test DiskArrays.checkscalar(Bool, 1, 2, 3) == true
-    @test DiskArrays.checkscalar(Bool, :, 2:5, 3) == true
+    @test DiskArrays.checkscalar(Bool, fill(Int), ()) == true
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (1, 2, 3)) == true
+    @test DiskArrays.checkscalar(Bool, zeros(5, 5, 5), (:, 2:5, 3)) == true
     a = AccessCountDiskArray(reshape(1:24, 2, 3, 4), chunksize=(2, 2, 2))
     @test a[1, 2, 3] == 15
     @test a[1, 2, 3, 1] == 15
@@ -37,6 +38,7 @@ end
     @test a[CartesianIndex(1, 2), 3] == 15
     @test a[CartesianIndex(1, 2, 3)] == 15
 end
+
 @testset "isdisk" begin
     a = reshape(1:24, 2, 3, 4)
     da = AccessCountDiskArray(a; chunksize=(2, 2, 2))
@@ -51,7 +53,12 @@ end
 
 function test_getindex(a)
     @test a[2, 3, 1] == 10
+    @test a[CartesianIndex(2, 3), 1] == 10
+    @test a[2, CartesianIndex(3,), 1] == 10
+    @test a[CartesianIndex(2, 3, 1)] == 10
+    @test a[1:2, CartesianIndex(3, 1, 1)] == 9:10
     @test a[2, 3] == 10
+    @test a[CartesianIndex(2, 3)] == 10
     @test a[2, 3, 1, 1] == 10
     @test a[:, 1] == [1, 2, 3, 4]
     @test a[1:2, 1:2, 1, 1] == [1 5; 2 6]
@@ -59,8 +66,9 @@ function test_getindex(a)
     @test a[2, 3, 1, 1:1] == [10]
     @test a[2, 3, 1, [1], [1]] == fill(10, 1, 1)
     @test a[:, 3, 1, [1]] == reshape(9:12, 4, 1)
+    @test a[:, CartesianIndex(3, 1), [1]] == reshape(9:12, 4, 1)
     @test a[CartesianIndices((1:2, 1:2)), 1] == [1 5; 2 6]
-    @test getindex_count(a) == 10
+    @test getindex_count(a) == 16
     # Test bitmask indexing
     m = falses(4, 5, 1)
     m[2, [1, 2, 3, 5], 1] .= true
@@ -72,6 +80,7 @@ function test_getindex(a)
     @test a[[3, 5, 8]] == [3, 5, 8]
     @test a[2:4:14] == [2, 6, 10, 14]
     # Test that readblock was called exactly onces for every getindex
+    @test a[2:2:4, 1:2:5] == [2 10 18; 4 12 20]
     @test a[2:2:4, 1:2:5] == [2 10 18; 4 12 20]
     @test a[[1, 3, 4], [1, 3], 1] == [1 9; 3 11; 4 12]
     @testset "allowscalar" begin
@@ -85,7 +94,7 @@ function test_getindex(a)
 end
 
 function test_setindex(a)
-    a[1, 1, 1] = 1
+    a[CartesianIndex(1, 1), 1] = 1
     a[1, 2] = 2
     a[1, 3, 1, 1] = 3
     a[2:2, :] = [1, 2, 3, 4, 5]
@@ -117,10 +126,12 @@ function test_view(a)
     v[1:2, 1] = [1, 2]
     v[1:2, 2:3] = [4 4; 4 4]
     @test v[1:2, 1] == [1, 2]
+    @test v[1:2, CartesianIndex(1,)] == [1, 2]
+    @test v[1:2, CartesianIndex(1, 1)] == [1, 2]
     @test v[1:2, 2:3] == [4 4; 4 4]
     @test trueparent(a)[2:3, 2] == [1, 2]
     @test trueparent(a)[2:3, 3:4] == [4 4; 4 4]
-    @test getindex_count(a) == 2
+    @test getindex_count(a) == 4
     @test setindex_count(a) == 2
 
     v2 = view(a, 2:3, 2:4, Int[])
@@ -904,15 +915,20 @@ import Base.PermutedDimsArrays.invperm
     ip = invperm(p)
     a = permutedims(AccessCountDiskArray(permutedims(reshape(1:20, 4, 5, 1), ip)), p)
     test_getindex(a)
-    a = permutedims(AccessCountDiskArray(zeros(Int, 5, 1, 4)), p)
+    a = PermutedDimsArray(AccessCountDiskArray(zeros(Int, 5, 1, 4)), p)
     test_setindex(a)
     a = permutedims(AccessCountDiskArray(zeros(Int, 5, 1, 4)), p)
     test_view(a)
-    a = data -> permutedims(AccessCountDiskArray(permutedims(data, ip); chunksize=(4, 2, 5)), p)
-    test_reductions(a)
+    f = data -> permutedims(AccessCountDiskArray(permutedims(data, ip); chunksize=(4, 2, 5)), p)
+    test_reductions(f)
     a_disk1 = permutedims(AccessCountDiskArray(rand(9, 2, 10); chunksize=(3, 2, 5)), p)
     test_broadcast(a_disk1)
-    @test PermutedDiskArray(a_disk1.a) === a_disk1
+
+    @testset "ConstructionBase works on PermutedDiskArray" begin
+        v = ones(Int, 10, 2, 2)
+        av = ConstructionBase.setproperties(a, (; parent=v))
+        @test parent(av) === v
+    end
 end
 
 @testset "Unchunked String arrays" begin
@@ -1061,6 +1077,8 @@ end
         @test ca[:, 3, 1] == ch[:, 3, 1]
         @test ca[:, 200, 1] == ch[:, 200, 1]
         @test ca[200, :, 1] == ch[200, :, 1]
+        # Test scalar indexing is not checked for CachedDiskArray
+        @test ca[200, 1, 1] == ch[200, 1:1, 1][1]
     end
 end
 
@@ -1148,4 +1166,12 @@ end
         @test occursin("DiskGenerator", out) == false
     end
     @test count(a) + count(!, a) == length(a)
+end
+
+@testset "unique" begin
+    a = ChunkedDiskArray((1:100) .& 7, chunksize=(9,))
+    out = @capture_out @trace unique(a) DiskArrays
+    @test occursin("_iterate_disk", out) == false
+    @test length(unique(a)) == length(unique(identity, a)) == 8
+    @test unique(x->x>3, a) == [1,4]
 end

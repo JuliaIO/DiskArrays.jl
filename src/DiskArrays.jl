@@ -1,6 +1,10 @@
 module DiskArrays
 
+import ConstructionBase
+
 using LRUCache: LRUCache, LRU
+
+using Base: tail
 
 # Use the README as the module docs
 @doc let

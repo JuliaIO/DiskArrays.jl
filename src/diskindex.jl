@@ -52,7 +52,13 @@ DiskIndex(a, i::Tuple{<:AbstractVector{<:Integer}}, batchstrategy) =
 function _resolve_indices(chunks, i, indices_pre::DiskIndex, strategy::BatchStrategy)
     inow = first(i)
     indices_new, chunksrem = process_index(inow, chunks, strategy)
-    _resolve_indices(chunksrem, Base.tail(i), merge_index(indices_pre, indices_new), strategy)
+    _resolve_indices(chunksrem, tail(i), merge_index(indices_pre, indices_new), strategy)
+end
+# Splat out CartesianIndex as regular indices
+function _resolve_indices(
+    chunks, i::Tuple{<:CartesianIndex}, indices_pre::DiskIndex, strategy::BatchStrategy
+)
+    _resolve_indices(chunks, (Tuple(i[1])..., tail(i)...), indices_pre, strategy)
 end
 _resolve_indices(::Tuple{}, ::Tuple{}, indices::DiskIndex, strategy::BatchStrategy) = indices
 # No dimension left in array, only singular indices allowed
@@ -61,16 +67,24 @@ function _resolve_indices(::Tuple{}, i, indices_pre::DiskIndex, strategy::BatchS
     (length(inow) == 1 && only(inow) == 1) || throw(ArgumentError("Trailing indices must be 1"))
     indices_new = DiskIndex(size(inow), (), size(inow), (), ())
     indices = merge_index(indices_pre, indices_new)
-    _resolve_indices((), Base.tail(i), indices, strategy)
+    _resolve_indices((), tail(i), indices, strategy)
+end
+# Splat out CartesianIndex as regular trailing indices
+function _resolve_indices(
+    ::Tuple{}, i::Tuple{<:CartesianIndex}, indices_pre::DiskIndex, strategy::BatchStrategy
+)
+    _resolve_indices((), (Tuple(i[1])..., tail(i)...), indices_pre, strategy)
 end
 # Still dimensions left, but no indices available
 function _resolve_indices(chunks, ::Tuple{}, indices_pre::DiskIndex, strategy::BatchStrategy)
     chunksnow = first(chunks)
-    arraysize_from_chunksize(chunksnow) == 1 || throw(ArgumentError("Indices can only be omitted for trailing singleton dimensions"))
+    checktrailing(arraysize_from_chunksize(chunksnow))
     indices_new = add_dimension_index(strategy)
     indices = merge_index(indices_pre, indices_new)
-    _resolve_indices(Base.tail(chunks), (), indices, strategy)
+    _resolve_indices(tail(chunks), (), indices, strategy)
 end
+
+checktrailing(i) = i == 1 || throw(ArgumentError("Indices can only be omitted for trailing singleton dimensions"))
 
 add_dimension_index(::NoBatch) = DiskIndex((), (1,), (), (1,), (1:1,))
 add_dimension_index(::Union{ChunkRead,SubRanges}) = DiskIndex((), (1,), ([()],), ([(1,)],), ([(1:1,)],))
@@ -98,18 +112,24 @@ Calculate indices for `i` the first chunk/s in `chunks`
 Returns a [`DiskIndex`](@ref), and the remaining chunks.
 """
 process_index(i, chunks, ::NoBatch) = process_index(i, chunks)
-process_index(inow::Integer, chunks) = DiskIndex((), (1,), (), (1,), (inow:inow,)), Base.tail(chunks)
+function process_index(i::CartesianIndex{N}, chunks, ::NoBatch) where {N}
+    _, chunksrem = splitchunks(i, chunks)
+    di = DiskIndex((), map(one, i.I), (), (1,), map(i -> i:i, i.I))
+    return di, chunksrem
+end
+process_index(inow::Integer, chunks) = 
+    DiskIndex((), (1,), (), (1,), (inow:inow,)), tail(chunks)
 function process_index(::Colon, chunks)
     s = arraysize_from_chunksize(first(chunks))
-    DiskIndex((s,), (s,), (Colon(),), (Colon(),), (1:s,),), Base.tail(chunks)
+    DiskIndex((s,), (s,), (Colon(),), (Colon(),), (1:s,),), tail(chunks)
 end
 function process_index(i::AbstractUnitRange{<:Integer}, chunks, ::NoBatch)
-    DiskIndex((length(i),), (length(i),), (Colon(),), (Colon(),), (i,)), Base.tail(chunks)
+    DiskIndex((length(i),), (length(i),), (Colon(),), (Colon(),), (i,)), tail(chunks)
 end
 function process_index(i::AbstractArray{<:Integer}, chunks, ::NoBatch)
     indmin, indmax = isempty(i) ? (1, 0) : extrema(i)
     di = DiskIndex(size(i), ((indmax - indmin + 1),), map(_ -> Colon(), size(i)), ((i .- (indmin - 1)),), (indmin:indmax,))
-    return di, Base.tail(chunks)
+    return di, tail(chunks)
 end
 function process_index(i::AbstractArray{Bool,N}, chunks, ::NoBatch) where {N}
     chunksnow, chunksrem = splitchunks(i, chunks)
@@ -162,7 +182,12 @@ splitchunks(i::CartesianIndex, chunks) = splitchunks(i.I, (), chunks)
 splitchunks(_, chunks) = (first(chunks),), Base.tail(chunks)
 splitchunks(si, chunksnow, chunksrem) =
     splitchunks(Base.tail(si), (chunksnow..., first(chunksrem)), Base.tail(chunksrem))
+function splitchunks(si,chunksnow, ::Tuple{})
+    only(first(si)) == 1 || throw(ArgumentError("Trailing indices must be 1"))
+    splitchunks(Base.tail(si), chunksnow, ())
+end
 splitchunks(::Tuple{}, chunksnow, chunksrem) = (chunksnow, chunksrem)
+splitchunks(::Tuple{}, chunksnow, chunksrem::Tuple{}) = (chunksnow, chunksrem)
 
 """
     output_aliasing(di::DiskIndex, ndims_dest, ndims_source)
