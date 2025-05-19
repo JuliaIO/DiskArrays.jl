@@ -2,7 +2,7 @@
 """
     ConcatDiskArray <: AbstractDiskArray
     
-    ConcatDiskArray(arrays)
+    ConcatDiskArray(arrays, combinegridchunks=:error)
 
 Joins multiple `AbstractArray`s or `AbstractDiskArray`s into
 a single disk array, using lazy concatination. Note that if some elements
@@ -10,6 +10,14 @@ of `arrays` are `missing`, this array will be interpreted as a block containing
 only missing elements. This can be useful when concatenating mosaics of tiles 
 where some tiles in are missing or when stacking arrays along a new dimension
 and some layers are missing. 
+
+If the chunks of the different datasets to be concatenated are not compatible, one can choose among 
+the following options how chunks will be merged:
+- `:error` (default): raise an error if the chunks are not compatible
+- `:first`: use the chunks of the first dataset
+- `:last`: use the chunks of the last dataset
+- `:minsize`: use the smallest chunks
+- `:maxsize`: use the largest chunks
 
 Returned from `cat` on disk arrays. 
 
@@ -24,7 +32,7 @@ struct ConcatDiskArray{T,N,P,C,HC,ID} <: AbstractDiskArray{T,N}
     innerdims::Val{ID}
 end
 
-function ConcatDiskArray(arrays::AbstractArray{Union{<:AbstractArray,Missing}})
+function ConcatDiskArray(arrays::AbstractArray{Union{<:AbstractArray,Missing}},combinegridchunks=:error)
     et = Base.nonmissingtype(eltype(arrays))
     T = Union{Missing,eltype(et)}
     N = ndims(arrays)
@@ -41,7 +49,7 @@ function infer_eltypes(arrays)
         end
     end
 end
-function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray})
+function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray}, combinegridchunks::Symbol=:error)
     N = ndims(arrays)
     T = eltype(eltype(arrays))
     if !isconcretetype(T)
@@ -49,16 +57,16 @@ function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray})
     else
         M = ndims(eltype(arrays))
     end
-    _ConcatDiskArray(arrays, T, Val(N), Val(M))
+    _ConcatDiskArray(arrays, T, Val(N), Val(M),combinegridchunks)
 end
-function ConcatDiskArray(arrays::AbstractArray)
+function ConcatDiskArray(arrays::AbstractArray, combinegridchunks::Symbol=:error)
     N = ndims(arrays)
     M,T = infer_eltypes(arrays)
-    _ConcatDiskArray(arrays, T, Val(N), Val(M))
+    _ConcatDiskArray(arrays, T, Val(N), Val(M),combinegridchunks)
 end
 
 
-function _ConcatDiskArray(arrays, T, ::Val{N}, ::Val{M}) where {N,M}
+function _ConcatDiskArray(arrays, T, ::Val{N}, ::Val{M},combinegridchunks) where {N,M}
     if N < M
         newshape = extenddims(size(arrays), ntuple(_ -> 1, M), 1)
         arrays1 = reshape(arrays, newshape)
@@ -67,12 +75,12 @@ function _ConcatDiskArray(arrays, T, ::Val{N}, ::Val{M}) where {N,M}
         arrays1 = arrays
         D = N
     end
-    ConcatDiskArray(arrays1::AbstractArray, T, Val(D), Val(M))
+    ConcatDiskArray(arrays1::AbstractArray, T, Val(D), Val(M),combinegridchunks)
 end
-function ConcatDiskArray(arrays1::AbstractArray, T, ::Val{D},::Val{ID}) where {D,ID}
+function ConcatDiskArray(arrays1::AbstractArray, T, ::Val{D},::Val{ID},combinegridchunks) where {D,ID}
     startinds, sizes = arraysize_and_startinds(arrays1)
 
-    chunks = concat_chunksize(arrays1)
+    chunks = concat_chunksize(arrays1,combinegridchunks)
     hc = Chunked(batchstrategy(chunks))
 
     return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc),ID}(arrays1, startinds, sizes, chunks, hc,Val(ID))
@@ -184,8 +192,23 @@ fix_outerrangeshape(res, outer_range, ::Tuple{}) =
     fix_outerrangeshape((res..., only(first(outer_range))), Base.tail(outer_range), ())
 fix_outerrangeshape(res, ::Tuple{}, ::Tuple{}) = res
 
+function fix_nonfitting_chunks(strategy, a, b)
+    if strategy == :first
+        return a
+    elseif strategy == :last
+        return b
+    elseif strategy == :maxsize
+        return a.chunksize > b.chunksize ? a : b
+    elseif strategy == :minsize
+        return a.chunksize < b.chunksize ? a : b
+    elseif strategy == :error
+        return throw(ArgumentError("Chunk sizes don't form a grid"))
+    else
+        throw(ArgumentError("Unknown strategy $strategy"))
+    end
+end
 
-function concat_chunksize(parents)
+function concat_chunksize(parents, strategy=:error)
     newchunks = map(s -> Vector{Union{RegularChunks,IrregularChunks}}(undef, s), size(parents))
     for i in CartesianIndices(parents)
         array = parents[i]
@@ -195,7 +218,7 @@ function concat_chunksize(parents)
             if !isassigned(newc, ind)
                 newc[ind] = c
             elseif c != newc[ind]
-                throw(ArgumentError("Chunk sizes don't forma grid"))
+                newc[ind] = fix_nonfitting_chunks(strategy, c,newc[ind])
             end
         end
     end
