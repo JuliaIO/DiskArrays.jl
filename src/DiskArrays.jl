@@ -1,6 +1,7 @@
 module DiskArrays
 
 import ConstructionBase
+import Base.PermutedDimsArrays: genperm
 
 using LRUCache: LRUCache, LRU
 
