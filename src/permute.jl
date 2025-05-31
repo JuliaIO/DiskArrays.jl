@@ -1,9 +1,16 @@
 """
-    PermutedDiskArray <: AbstractDiskArray
+    AbstractPermutedDiskArray <: AbstractDiskArray
+
+Abstract supertype for diskarray with permuted dimensions.
+"""
+abstract type AbstractPermutedDiskArray{T,N,perm,iperm,A} <: AbstractDiskArray{T,N} end
+
+"""
+    PermutedDiskArray <: AbstractPermutedDiskArray
 
 A lazily permuted disk array returned by `permutedims(diskarray, permutation)`.
 """
-struct PermutedDiskArray{T,N,perm,iperm,A<:AbstractArray{T,N}} <: AbstractDiskArray{T,N}
+struct PermutedDiskArray{T,N,perm,iperm,A<:AbstractArray{T,N}} <: AbstractPermutedDiskArray{T,N,perm,iperm,A}
     parent::A
 end
 # We use PermutedDimsArray internals instead of duplicating them,
@@ -41,7 +48,7 @@ function eachchunk(a::PermutedDiskArray)
     # Return permuted GridChunks
     return GridChunks(genperm(gridchunks.chunks, perm)...)
 end
-function DiskArrays.readblock!(a::PermutedDiskArray, aout, i::OrdinalRange...)
+function DiskArrays.readblock!(a::AbstractPermutedDiskArray, aout, i::OrdinalRange...)
     iperm = _getiperm(a)
     # Permute the indices
     inew = genperm(i, iperm)
@@ -49,7 +56,7 @@ function DiskArrays.readblock!(a::PermutedDiskArray, aout, i::OrdinalRange...)
     DiskArrays.readblock!(parent(a), PermutedDimsArray(aout, iperm), inew...)
     return nothing
 end
-function DiskArrays.writeblock!(a::PermutedDiskArray, v, i::OrdinalRange...)
+function DiskArrays.writeblock!(a::AbstractPermutedDiskArray, v, i::OrdinalRange...)
     iperm = _getiperm(a)
     inew = genperm(i, iperm)
     # Permute the dest block and write from the true parent
@@ -57,8 +64,8 @@ function DiskArrays.writeblock!(a::PermutedDiskArray, v, i::OrdinalRange...)
     return nothing
 end
 
-_getperm(::PermutedDiskArray{<:Any,<:Any,perm}) where {perm} = perm
-_getiperm(::PermutedDiskArray{<:Any,<:Any,<:Any,iperm}) where {iperm} = iperm
+_getperm(::AbstractPermutedDiskArray{<:Any,<:Any,perm}) where {perm} = perm
+_getiperm(::AbstractPermutedDiskArray{<:Any,<:Any,<:Any,iperm}) where {iperm} = iperm
 
 # Implementation macro
 

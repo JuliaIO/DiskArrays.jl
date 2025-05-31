@@ -1,12 +1,17 @@
 import Base: _throw_dmrs
-import Base.PermutedDimsArrays: genperm
 
 """
-    ReshapedDiskArray <: AbstractDiskArray
+    AbstractReshapedDiskArray <: AbstractDiskArray
+
+Abstract supertype for a replacements of `Base.ReshapedArray` for `AbstractDiskArray`s`
+"""
+abstract type AbstractReshapedDiskArray{T,N,P,M} <: AbstractDiskArray{T,N} end
+
+"""
+    ReshapedDiskArray <: AbstractReshapedDiskArray
 
 A replacement for `Base.ReshapedArray` for disk arrays,
 returned by `reshape`.
-
 
 Reshaping is really not trivial, because the access pattern would 
 completely change for reshaped arrays, rectangles would not remain 
@@ -15,25 +20,26 @@ rectangles in the parent array.
 However, we can support the case where only singleton dimensions are added, 
 later we could allow more special cases like joining two dimensions to one
 """
-struct ReshapedDiskArray{T,N,P<:AbstractArray{T},M} <: AbstractDiskArray{T,N}
+struct ReshapedDiskArray{T,N,P<:AbstractArray{T},M} <: AbstractReshapedDiskArray{T,N,P,M}
     parent::P
     keepdim::NTuple{M,Int}
     newsize::NTuple{N,Int}
 end
 
 # Base methods
+Base.size(r::AbstractReshapedDiskArray) = r.newsize
+Base.parent(r::AbstractReshapedDiskArray) = r.parent
 
-Base.parent(r::ReshapedDiskArray) = r.parent
-Base.size(r::ReshapedDiskArray) = r.newsize
+keepdim(r::AbstractReshapedDiskArray) = r.keepdim
 
 # DiskArrays interface
 
-haschunks(a::ReshapedDiskArray) = haschunks(a.parent)
-function eachchunk(a::ReshapedDiskArray{<:Any,N}) where {N}
-    pchunks = eachchunk(a.parent)
+haschunks(a::AbstractReshapedDiskArray) = haschunks(parent(a))
+function eachchunk(a::AbstractReshapedDiskArray{<:Any,N}) where {N}
+    pchunks = eachchunk(parent(a))
     inow::Int = 0
     outchunks = ntuple(N) do idim
-        if in(idim, a.keepdim)
+        if in(idim, keepdim(a))
             inow += 1
             pchunks.chunks[inow]
         else
@@ -42,14 +48,14 @@ function eachchunk(a::ReshapedDiskArray{<:Any,N}) where {N}
     end
     return GridChunks(outchunks...)
 end
-function DiskArrays.readblock!(a::ReshapedDiskArray, aout, i::OrdinalRange...)
-    inew = tuple_tuple_getindex(i, a.keepdim)
-    DiskArrays.readblock!(a.parent, reshape(aout, map(length, inew)), inew...)
+function DiskArrays.readblock!(a::AbstractReshapedDiskArray, aout, i::OrdinalRange...)
+    inew = tuple_tuple_getindex(i, keepdim(a))
+    DiskArrays.readblock!(parent(a), reshape(aout, map(length, inew)), inew...)
     return nothing
 end
-function DiskArrays.writeblock!(a::ReshapedDiskArray, v, i::OrdinalRange...)
-    inew = tuple_tuple_getindex(i, a.keepdim)
-    DiskArrays.writeblock!(a.parent, reshape(v, map(length, inew)), inew...)
+function DiskArrays.writeblock!(a::AbstractReshapedDiskArray, v, i::OrdinalRange...)
+    inew = tuple_tuple_getindex(i, keepdim(a))
+    DiskArrays.writeblock!(parent(a), reshape(v, map(length, inew)), inew...)
     return nothing
 end
 function reshape_disk(parent, dims)
@@ -93,6 +99,6 @@ macro implement_reshape(t)
 end
 
 # For ambiguity
-function Base._reshape(A::DiskArrays.AbstractDiskArray{<:Any,1}, dims::Tuple{Int64})
+function Base._reshape(A::AbstractDiskArray{<:Any,1}, dims::Tuple{Int64})
     return reshape_disk(A, dims)
 end
