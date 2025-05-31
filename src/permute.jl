@@ -3,14 +3,14 @@
 
 Abstract supertype for diskarray with permuted dimensions.
 """
-abstract type AbstractPermutedDiskArray{T,N} <: AbstractDiskArray{T,N} end
+abstract type AbstractPermutedDiskArray{T,N,perm,iperm,A} <: AbstractDiskArray{T,N} end
 
 """
     PermutedDiskArray <: AbstractPermutedDiskArray
 
 A lazily permuted disk array returned by `permutedims(diskarray, permutation)`.
 """
-struct PermutedDiskArray{T,N,perm,iperm,A<:AbstractArray{T,N}} <: AbstractPermutedDiskArray{T,N}
+struct PermutedDiskArray{T,N,perm,iperm,A<:AbstractArray{T,N}} <: AbstractPermutedDiskArray{T,N,perm,iperm,A}
     parent::A
 end
 # We use PermutedDimsArray internals instead of duplicating them,
@@ -64,8 +64,8 @@ function DiskArrays.writeblock!(a::AbstractPermutedDiskArray, v, i::OrdinalRange
     return nothing
 end
 
-_getperm(::PermutedDiskArray{<:Any,<:Any,perm}) where {perm} = perm
-_getiperm(::PermutedDiskArray{<:Any,<:Any,<:Any,iperm}) where {iperm} = iperm
+_getperm(::AbstractPermutedDiskArray{<:Any,<:Any,perm}) where {perm} = perm
+_getiperm(::AbstractPermutedDiskArray{<:Any,<:Any,<:Any,iperm}) where {iperm} = iperm
 
 # Implementation macro
 
