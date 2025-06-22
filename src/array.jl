@@ -21,6 +21,19 @@ function _disk_copyto!(dest, Rdest, src, Rsrc)
         return dest
     end
     view(dest, Rdest) .= view(src, Rsrc)
+    return dest
+end
+function _disk_copyto_vector!(dest, dstart, src, sstart, n)
+    if iszero(n)
+        return dest
+    end
+    if n < 0
+        throw(ArgumentError(LazyString("tried to copy n=",
+        n," elements, but n should be non-negative")))
+    end
+    destv = view(dest, range(dstart, length=n))
+    DiskArrays.readblock!(src, destv, range(sstart, length=n))
+    return dest
 end
 
 # Use a view for lazy reverse
@@ -75,6 +88,9 @@ macro implement_array_methods(t)
         Base.copyto!(dest::PermutedDimsArray, src::$t) = DiskArrays._copyto!(dest, src)
         function Base.copyto!(dest::PermutedDimsArray{T,N}, src::$t{T,N}) where {T,N}
             return $_disk_copyto!(dest, src)
+        end
+        function Base.copyto!(dest::Vector{T}, dstart::Integer, src::$t{T, 1}, sstart::Integer, n::Integer) where {T}
+            return $_disk_copyto_vector!(dest, dstart, src, sstart, n)
         end
 
         Base.reverse(a::$t; dims=:) = $_disk_reverse(a, dims)
