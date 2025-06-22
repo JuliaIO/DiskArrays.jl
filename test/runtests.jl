@@ -780,13 +780,24 @@ end
         @test_throws ArgumentError copyto!(x, CartesianIndices((1:1, 1:2)), a_disk, CartesianIndices((4:6, 8:9)))
         # 5 arg copyto!
         a_vec = collect(0x00:0x90)
-        a_vec_disk = AccessCountDiskArray(a_vec; chunksize=(15,))
-        x_vec = zero(a_vec)
-        @test_throws ArgumentError copyto!(x_vec, 1, a_vec_disk, 1, -1)
-        @test copyto!(x_vec, 1, a_vec_disk, 1, 0) === x_vec
-        @test copyto!(x_vec, 6, a_vec_disk, 3, 2) === x_vec
-        @test x_vec[6] == a_vec[3]
-        @test x_vec[7] == a_vec[4]
+        test_dests = [
+            zero(a_vec),
+            zeros(Float32, length(a_vec)),
+            view(zero(a_vec), 1:10),
+            view(zero(a_vec), 1:2:20),
+            view(zeros(Float32, length(a_vec)), 1:10),
+            view(zeros(Float32, length(a_vec)), 1:2:20),
+        ]
+        for x in test_dests
+            local a_disk = AccessCountDiskArray(a_vec; chunksize=(15,))
+            x = zero(a_vec)
+            @test_throws ArgumentError copyto!(x, 1, a_disk, 1, -1)
+            @test copyto!(x, 1, a_disk, 1, 0) === x
+            @test copyto!(x, 6, a_disk, 3, 2) === x
+            @test x[6] == a_vec[3]
+            @test x[7] == a_vec[4]
+            @test getindex_count(a_disk) == 1
+        end
     end
 
     @test collect(reverse(a_disk)) == reverse(a)

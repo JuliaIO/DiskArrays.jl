@@ -23,7 +23,7 @@ function _disk_copyto!(dest, Rdest, src, Rsrc)
     view(dest, Rdest) .= view(src, Rsrc)
     return dest
 end
-function _disk_copyto_vector!(dest, dstart, src, sstart, n)
+function _disk_copyto_same_type_vector!(dest, dstart, src, sstart, n)
     if iszero(n)
         return dest
     end
@@ -33,6 +33,17 @@ function _disk_copyto_vector!(dest, dstart, src, sstart, n)
     end
     destv = view(dest, range(dstart, length=n))
     DiskArrays.readblock!(src, destv, range(sstart, length=n))
+    return dest
+end
+function _disk_copyto_vector!(dest, dstart, src, sstart, n)
+    if iszero(n)
+        return dest
+    end
+    if n < 0
+        throw(ArgumentError(LazyString("tried to copy n=",
+        n," elements, but n should be non-negative")))
+    end
+    view(dest, range(dstart, length=n)) .= view(src, range(dstart, length=n))
     return dest
 end
 
@@ -90,6 +101,15 @@ macro implement_array_methods(t)
             return $_disk_copyto!(dest, src)
         end
         function Base.copyto!(dest::Vector{T}, dstart::Integer, src::$t{T, 1}, sstart::Integer, n::Integer) where {T}
+            return $_disk_copyto_same_type_vector!(dest, dstart, src, sstart, n)
+        end
+        function Base.copyto!(dest::SubArray{T, 1, Vector{T}, <:Tuple{AbstractUnitRange}, true}, dstart::Integer, src::$t{T, 1}, sstart::Integer, n::Integer) where {T}
+            return $_disk_copyto_same_type_vector!(dest, dstart, src, sstart, n)
+        end
+        function Base.copyto!(dest::Vector, dstart::Integer, src::$t{T, 1}, sstart::Integer, n::Integer) where {T}
+            return $_disk_copyto_vector!(dest, dstart, src, sstart, n)
+        end
+        function Base.copyto!(dest::SubArray{TD, 1, Vector{TD}}, dstart::Integer, src::$t{TS, 1}, sstart::Integer, n::Integer) where {TD, TS}
             return $_disk_copyto_vector!(dest, dstart, src, sstart, n)
         end
 
