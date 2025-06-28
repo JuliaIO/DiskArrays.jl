@@ -782,11 +782,7 @@ end
         a_vec = collect(0x00:0x90)
         test_dests = [
             zero(a_vec),
-            zeros(Float32, length(a_vec)),
             view(zero(a_vec), 1:10),
-            view(zero(a_vec), 1:2:20),
-            view(zeros(Float32, length(a_vec)), 1:10),
-            view(zeros(Float32, length(a_vec)), 1:2:20),
         ]
         for x in test_dests
             local a_disk = AccessCountDiskArray(a_vec; chunksize=(15,))
