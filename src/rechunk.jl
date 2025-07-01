@@ -24,9 +24,8 @@ Note that this will not change the chunking of the underlying data itself, it wi
 
 The chunks argument can take one of the following forms:
 
-•  a DiskArrays.GridChunks object
-
-•  a tuple specifying the chunk size along each dimension
+- a [`DiskArrays.GridChunks`](@ref) object
+- a tuple specifying the chunk size along each dimension, like `(10, 10, 1)` for a 3-D array
 """
 mockchunks(data::AbstractDiskArray, chunks::GridChunks) = MockChunkedDiskArray(data, chunks)
 
