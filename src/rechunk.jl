@@ -3,7 +3,7 @@
 
     MockChunkedDiskArray(parent::AbstractArray, chunks::GridChunks)
 
-A disk array that pretends a specific chunk pattern, 
+A disk array that pretends to have a specific chunk pattern, 
 regardless of the true chunk pattern of the parent array.
 
 This is useful in `zip` and other operations that can iterate
