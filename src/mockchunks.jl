@@ -51,3 +51,5 @@ function _readblock_mockchunked(A, data, I...)
         copyto!(data, view(parent(A), I...))
     end
 end
+
+Base.@deprecate_binding RechunkedDiskArray MockChunkedDiskArray
