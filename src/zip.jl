@@ -30,7 +30,7 @@ function DiskZip(As::AbstractArray...)
         return DiskZip(As)
     else
         rechunked = map(As) do A
-            RechunkedDiskArray(A, chunks)
+            MockChunkedDiskArray(A, chunks)
         end
         return DiskZip(rechunked)
     end
