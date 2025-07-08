@@ -183,7 +183,7 @@ function process_index(i::AbstractArray{Bool,N}, chunks, ::NoBatch) where {N}
 
     output_size = (sum(i),)
     temparray_size = map((max, min) -> max - min + 1, indmax, indmin)
-    output_indices = (Colon(),), 
+    output_indices = (Colon(),)
     temparray_indices = (view(i, map(range, indmin, indmax)...),)
     data_indices = map(range, indmin, indmax)
     di = DiskIndex(output_size, temparray_size, output_indices, temparray_indices, data_indices)
