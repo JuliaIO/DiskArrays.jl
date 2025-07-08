@@ -84,7 +84,13 @@ function _resolve_indices(chunks::Tuple{<:Any,<:Any,<:Any,<:Any}, i::Tuple{<:Any
 end
 # Splat out CartesianIndex as regular indices
 function _resolve_indices(
-    chunks, i::Tuple{<:CartesianIndex}, indices_pre::DiskIndex, strategy::BatchStrategy
+    chunks::Tuple, i::Tuple{<:CartesianIndex}, indices_pre::DiskIndex, strategy::BatchStrategy
+)
+    _resolve_indices(chunks, (Tuple(i[1])..., tail(i)...), indices_pre, strategy)
+end
+# This method is needed to resolve ambiguity
+function _resolve_indices(
+    chunks::Tuple{<:Any}, i::Tuple{<:CartesianIndex}, indices_pre::DiskIndex, strategy::BatchStrategy
 )
     _resolve_indices(chunks, (Tuple(i[1])..., tail(i)...), indices_pre, strategy)
 end

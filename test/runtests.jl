@@ -11,7 +11,7 @@ using TraceFuns, Suppressor
 # using JET
 # JET.report_package(DiskArrays)
 
-if VERSION >= v"1.9.0"
+@testset "Aqua.jl" begin
     Aqua.test_ambiguities([DiskArrays, Base, Core])
     Aqua.test_unbound_args(DiskArrays)
     Aqua.test_stale_deps(DiskArrays)
