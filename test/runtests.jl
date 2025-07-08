@@ -1087,3 +1087,16 @@ end
     @test length(unique(a)) == length(unique(identity, a)) == 8
     @test unique(x->x>3, a) == [1,4]
 end
+
+@testset "type stable DiskIndex" begin
+    a = AccessCountDiskArray(reshape(1:96, 2, 3, 4, 2, 2, 1), chunksize=(2, 2, 2, 2, 2, 1))
+    a_view3 = @view a[:, 1:2, 2:4, 1, 1, 1]
+    a_view4 = @view a[:, 1:2, 2:4, :, 1, 1]
+    a_view5 = @view a[:, 1:2, 2:4, :, :, 1]
+    a_view6 = @view a[:, 1:2, 2:4, :, :, :]
+
+    @inferred DiskArrays.DiskIndex(a_view3, (1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
+    @inferred DiskArrays.DiskIndex(a_view4, (1:1, 1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
+    @inferred DiskArrays.DiskIndex(a_view5, (1:1, 1:1, 1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
+    @inferred DiskArrays.DiskIndex(a_view6, (1:1, 1:1, 1:1, 1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
+end
