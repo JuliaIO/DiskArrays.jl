@@ -90,7 +90,7 @@ function _resolve_indices(
 end
 _resolve_indices(::Tuple{}, ::Tuple{}, indices::DiskIndex, strategy::BatchStrategy) = indices
 # No dimension left in array, only singular indices allowed
-Base.@assume_effects :foldable function _resolve_indices(::Tuple{}, i, indices_pre::DiskIndex, strategy::BatchStrategy)
+function _resolve_indices(::Tuple{}, i, indices_pre::DiskIndex, strategy::BatchStrategy)
     inow = first(i)
     (length(inow) == 1 && only(inow) == 1) || throw(ArgumentError("Trailing indices must be 1"))
     indices_new = DiskIndex(size(inow), (), size(inow), (), ())
@@ -98,13 +98,13 @@ Base.@assume_effects :foldable function _resolve_indices(::Tuple{}, i, indices_p
     _resolve_indices((), tail(i), indices, strategy)
 end
 # Splat out CartesianIndex as regular trailing indices
-Base.@assume_effects :foldable function _resolve_indices(
+function _resolve_indices(
     ::Tuple{}, i::Tuple{<:CartesianIndex}, indices_pre::DiskIndex, strategy::BatchStrategy
 )
     _resolve_indices((), (Tuple(i[1])..., tail(i)...), indices_pre, strategy)
 end
 # Still dimensions left, but no indices available
-Base.@assume_effects :foldable function _resolve_indices(chunks, ::Tuple{}, indices_pre::DiskIndex, strategy::BatchStrategy)
+function _resolve_indices(chunks, ::Tuple{}, indices_pre::DiskIndex, strategy::BatchStrategy)
     chunksnow = first(chunks)
     checktrailing(arraysize_from_chunksize(chunksnow))
     indices_new = add_dimension_index(strategy)
@@ -146,9 +146,9 @@ function process_index(i::CartesianIndex{N}, chunks::Tuple, ::NoBatch) where {N}
 
     return di, chunksrem
 end
-Base.@assume_effects :foldable process_index(inow::Integer, chunks) = 
+process_index(inow::Integer, chunks) = 
     DiskIndex((), (1,), (), (1,), (inow:inow,)), tail(chunks)
-Base.@assume_effects :foldable function process_index(::Colon, chunks)
+function process_index(::Colon, chunks)
     s = arraysize_from_chunksize(first(chunks))
     di = DiskIndex((s,), (s,), (Colon(),), (Colon(),), (1:s,),)
     return di, tail(chunks)
@@ -157,7 +157,7 @@ function process_index(i::AbstractUnitRange{<:Integer}, chunks, ::NoBatch)
     di = DiskIndex((length(i),), (length(i),), (Colon(),), (Colon(),), (i,))
     return di::DiskIndex, tail(chunks)::Tuple
 end
-Base.@assume_effects :foldable function process_index(i::AbstractArray{<:Integer}, chunks, ::NoBatch)
+function process_index(i::AbstractArray{<:Integer}, chunks, ::NoBatch)
     indmin, indmax = isempty(i) ? (1, 0) : extrema(i)
 
     output_size = size(i)
@@ -169,7 +169,7 @@ Base.@assume_effects :foldable function process_index(i::AbstractArray{<:Integer
 
     return di, tail(chunks)
 end
-Base.@assume_effects :foldable function process_index(i::AbstractArray{Bool,N}, chunks, ::NoBatch) where {N}
+function process_index(i::AbstractArray{Bool,N}, chunks, ::NoBatch) where {N}
     chunksnow, chunksrem = splitchunks(i, chunks)
     s = arraysize_from_chunksize.(chunksnow)
     cindmin, cindmax = extrema(view(CartesianIndices(s), i))
@@ -184,7 +184,7 @@ Base.@assume_effects :foldable function process_index(i::AbstractArray{Bool,N}, 
 
     return di, chunksrem
 end
-Base.@assume_effects :foldable function process_index(i::AbstractArray{<:CartesianIndex{N}}, chunks, ::NoBatch) where {N}
+function process_index(i::AbstractArray{<:CartesianIndex{N}}, chunks, ::NoBatch) where {N}
     chunksnow, chunksrem = splitchunks(i, chunks)
     s = arraysize_from_chunksize.(chunksnow)
     v = view(CartesianIndices(s), i)
@@ -205,7 +205,7 @@ Base.@assume_effects :foldable function process_index(i::AbstractArray{<:Cartesi
 
     return di, chunksrem
 end
-Base.@assume_effects :foldable function process_index(i::CartesianIndices{N}, chunks, ::NoBatch) where {N}
+function process_index(i::CartesianIndices{N}, chunks, ::NoBatch) where {N}
     _, chunksrem = splitchunks(i, chunks)
 
     output_size = map(length, i.indices)  
