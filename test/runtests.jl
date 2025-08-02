@@ -1056,6 +1056,22 @@ end
     @test getindex_count(A) == 0
 end
 
+@testset "Show Gridchunks" begin
+    chunks = DiskArrays.GridChunks((10,10,10), (2,2,3))
+    sp = sprint(show, MIME("text/plain"), chunks)
+    @test occursin("5×5×4", sp)
+    @test occursin("(1:2", sp)
+    @test occursin("10:10)", sp)
+end
+
+@testset "Show RegularChunks" begin
+    regularchunks = DiskArrays.RegularChunks(10,0,20)
+    sr = sprint(show, MIME("text/plain"), regularchunks)
+    @test occursin("2-element", sr)
+    @test occursin("RegularChunks", sr)
+    @test occursin("1:10", sr)
+end
+
 @testset "Map over indices correctly" begin
     # This is a regression test for issue #144
     # `map` should always work over the correct indices,
