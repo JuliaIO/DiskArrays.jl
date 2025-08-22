@@ -770,15 +770,31 @@ end
     @test Array(a_disk) == a
     @testset "copyto" begin
         x = zero(a)
-        copyto!(x, a_disk)
+        @test copyto!(x, a_disk) === x
         @test x == a
-        copyto!(x, CartesianIndices((1:3, 1:2)), a_disk, CartesianIndices((8:10, 8:9)))
+        @test copyto!(x, CartesianIndices((1:3, 1:2)), a_disk, CartesianIndices((8:10, 8:9))) === x
         # Test copyto! with zero length index
         x_empty = Matrix{Int64}(undef, 0, 2)
         copyto!(x_empty, CartesianIndices((1:0, 1:2)), a_disk, CartesianIndices((8:7, 8:9)))
         # copyto! with different length should throw an error
         @test_throws ArgumentError copyto!(x, CartesianIndices((1:1, 1:2)), a_disk, CartesianIndices((4:6, 8:9)))
-
+        # 5 arg copyto!
+        a_vec = collect(0x00:0x90)
+        test_dests = [
+            zero(a_vec),
+            view(zero(a_vec), 1:10),
+            zeros(length(a_vec)), # This tests type conversion
+        ]
+        for x in test_dests
+            local a_disk = AccessCountDiskArray(a_vec; chunksize=(15,))
+            x = zero(a_vec)
+            @test_throws ArgumentError copyto!(x, 1, a_disk, 1, -1)
+            @test copyto!(x, 1, a_disk, 1, 0) === x
+            @test copyto!(x, 6, a_disk, 3, 2) === x
+            @test x[6] == a_vec[3]
+            @test x[7] == a_vec[4]
+            @test getindex_count(a_disk) == 1
+        end
     end
 
     @test collect(reverse(a_disk)) == reverse(a)
@@ -804,7 +820,7 @@ end
     @test vcat(a_disk, a_disk) == vcat(a, a)
     @test hcat(a_disk, a_disk) == hcat(a, a)
     @test cat(a_disk, a_disk; dims=3) == cat(a, a; dims=3)
-    @test_broken circshift(a_disk, 2) == circshift(a, 2) # This one is super weird. The size changes.
+    @test circshift(a_disk, 2) == circshift(a, 2)
 end
 
 @testset "Reshape" begin
