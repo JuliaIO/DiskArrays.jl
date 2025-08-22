@@ -783,6 +783,7 @@ end
         test_dests = [
             zero(a_vec),
             view(zero(a_vec), 1:10),
+            zeros(length(a_vec)), # This tests type conversion
         ]
         for x in test_dests
             local a_disk = AccessCountDiskArray(a_vec; chunksize=(15,))
