@@ -11,7 +11,7 @@ using TraceFuns, Suppressor
 # using JET
 # JET.report_package(DiskArrays)
 
-include("test_threading.jl")
+include("threading.jl")
 
 @testset "Aqua.jl" begin
     Aqua.test_ambiguities([DiskArrays, Base, Core])
