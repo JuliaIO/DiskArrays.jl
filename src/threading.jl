@@ -63,9 +63,9 @@ Check if threading is globally enabled.
 threading_enabled() = THREADING_ENABLED[]
 
 """
-    should_use_threading(x) -> Bool
+    should_use_threading(x) -> Val(Bool)
 
 Determine if threading should be used for a given DiskArray.
 Returns true only if both global threading is enabled AND the backend is thread-safe.
 """
-should_use_threading(x) = threading_enabled() && is_thread_safe(x)
+should_use_threading(x) = Val(threading_enabled() && is_thread_safe(x))

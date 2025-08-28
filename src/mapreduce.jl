@@ -67,9 +67,21 @@ function Base.count(f, v::AbstractDiskArray)
     end
 end
 
-Base.unique(v::AbstractDiskArray) = unique(identity, v)
-function Base.unique(f, v::AbstractDiskArray)
+Base.unique(v::AbstractDiskArray) = unique(should_use_threading(v), identity, v)
+Base.unique(f, v::AbstractDiskArray) = unique(should_use_threading(v), f, v)
+
+function Base.unique(::Val{false}, f, v::AbstractDiskArray)
     reduce((unique(f, v[c...]) for c in eachchunk(v))) do acc, u
         unique!(f, append!(acc, u))
+    end
+end
+
+function Base.unique(::Val{true}, f, v::AbstractDiskArray)
+    u = Vector{Vector{eltype(v)}}(undef, length(eachchunk(v)))
+    Threads.@threads :greedy for (i,c) in enumerate(eachchunk(v))
+        u[i] = unique(f, v[c...])
+    end
+    reduce(u) do acc, t
+        unique!(f, append!(acc, t))
     end
 end

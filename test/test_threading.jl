@@ -1,6 +1,3 @@
-using DiskArrays
-using Test
-
 # Mock thread-safe DiskArray for testing
 struct MockThreadSafeDiskArray{T,N} <: AbstractDiskArray{T,N}
     data::Array{T,N}
@@ -18,7 +15,7 @@ DiskArrays.threading_trait(::Type{<:MockThreadSafeDiskArray}) = DiskArrays.Threa
 
 @testset "Threading Traits" begin
     # Test default behavior (not thread safe)
-    regular_array = DiskArrays.ArrayDiskArray(rand(10, 10), (5, 5))
+    regular_array = ChunkedDiskArray(rand(10, 10), (5, 5))
     @test DiskArrays.threading_trait(regular_array) isa DiskArrays.NotThreadSafe
     @test !DiskArrays.is_thread_safe(regular_array)
 
@@ -40,21 +37,21 @@ end
 
     # Test should_use_threading logic
     thread_safe_array = MockThreadSafeDiskArray(rand(10, 10), (5, 5))
-    regular_array = DiskArrays.ArrayDiskArray(rand(10, 10), (5, 5))
+    regular_array = ChunkedDiskArray(rand(10, 10), (5, 5))
 
     DiskArrays.enable_threading()
-    @test DiskArrays.should_use_threading(thread_safe_array)
-    @test !DiskArrays.should_use_threading(regular_array)
+    @test DiskArrays.should_use_threading(thread_safe_array) == Val{true}()
+    @test DiskArrays.should_use_threading(regular_array) == Val{false}()
 
     DiskArrays.disable_threading()
-    @test !DiskArrays.should_use_threading(thread_safe_array)
-    @test !DiskArrays.should_use_threading(regular_array)
+    @test DiskArrays.should_use_threading(thread_safe_array) == Val{false}()
+    @test DiskArrays.should_use_threading(regular_array) == Val{false}()
 
     # Reset to default
     DiskArrays.enable_threading()
 end
 
-@testset "Threaded Unique" begin
+@testset "Threaded unique" begin
     # Test with thread-safe array
     data = [1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 1, 2, 3, 4, 5, 5, 6, 6, 6, 7]
     reshape_data = reshape(data, 4, 5)
@@ -70,7 +67,7 @@ end
     @test sort(result_with_func) == sort(expected_with_func)
 
     # Test fallback for non-thread-safe array
-    regular_array = DiskArrays.ArrayDiskArray(reshape_data, (2, 3))
+    regular_array = ChunkedDiskArray(reshape_data, (2, 3))
     result_fallback = unique(regular_array)
     @test sort(result_fallback) == sort(expected)
 

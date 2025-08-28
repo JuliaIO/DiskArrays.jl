@@ -62,7 +62,7 @@ result = unique(my_disk_array)
 result = unique(x -> x % 10, my_disk_array)
 
 # Explicitly use threaded version
-result = unique_threaded(my_disk_array)
+result = unique(Val{true}(), f, my_disk_array)
 ```
 
 The threaded unique algorithm:

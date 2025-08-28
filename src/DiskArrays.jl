@@ -36,14 +36,11 @@ include("zip.jl")
 include("show.jl")
 include("cached.jl")
 include("pad.jl")
-
 include("threading.jl")
-include("threaded_algorithms.jl")
 
 export ThreadingTrait, ThreadSafe, NotThreadSafe,
        threading_trait, is_thread_safe,
-       enable_threading, disable_threading, threading_enabled,
-       unique_threaded
+       enable_threading, disable_threading, threading_enabled
 
 # The all-in-one macro
 
