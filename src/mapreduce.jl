@@ -77,9 +77,10 @@ function Base.unique(::Val{false}, f, v::AbstractDiskArray)
 end
 
 function Base.unique(::Val{true}, f, v::AbstractDiskArray)
-    u = Vector{Vector{eltype(v)}}(undef, length(eachchunk(v)))
-    Threads.@threads :greedy for (i,c) in enumerate(eachchunk(v))
-        u[i] = unique(f, v[c...])
+    chunks = eachchunk(v)
+    u = Vector{Vector{eltype(v)}}(undef, length(chunks))
+    Threads.@threads for i in 1:length(chunks)
+        u[i] = unique(f, v[chunks[i]...])
     end
     reduce(u) do acc, t
         unique!(f, append!(acc, t))
