@@ -29,7 +29,7 @@ end
     # Test global threading control
     @test DiskArrays.threading_enabled()  # Should be true by default
 
-    DiskArrays.disable_threading()
+    DiskArrays.enable_threading(false)
     @test !DiskArrays.threading_enabled()
 
     DiskArrays.enable_threading()
@@ -43,7 +43,7 @@ end
     @test DiskArrays.should_use_threading(thread_safe_array) == Val{true}()
     @test DiskArrays.should_use_threading(regular_array) == Val{false}()
 
-    DiskArrays.disable_threading()
+    DiskArrays.enable_threading(false)
     @test DiskArrays.should_use_threading(thread_safe_array) == Val{false}()
     @test DiskArrays.should_use_threading(regular_array) == Val{false}()
 
@@ -72,7 +72,7 @@ end
     @test sort(result_fallback) == sort(expected)
 
     # Test with threading disabled
-    DiskArrays.disable_threading()
+    DiskArrays.enable_threading(false)
     result_no_threading = unique(thread_safe_array)
     @test sort(result_no_threading) == sort(expected)
     DiskArrays.enable_threading()  # Reset

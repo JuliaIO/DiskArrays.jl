@@ -49,13 +49,6 @@ When disabled, all algorithms will run single-threaded regardless of backend sup
 enable_threading(enable::Bool=true) = (THREADING_ENABLED[] = enable)
 
 """
-    disable_threading()
-
-Globally disable threading for DiskArray operations.
-"""
-disable_threading() = enable_threading(false)
-
-"""
     threading_enabled() -> Bool
 
 Check if threading is globally enabled.

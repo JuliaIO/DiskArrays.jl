@@ -40,7 +40,7 @@ include("threading.jl")
 
 export ThreadingTrait, ThreadSafe, NotThreadSafe,
        threading_trait, is_thread_safe,
-       enable_threading, disable_threading, threading_enabled
+       enable_threading, threading_enabled
 
 # The all-in-one macro
 
