@@ -1116,3 +1116,8 @@ end
     @inferred DiskArrays.DiskIndex(a_view5, (1:1, 1:1, 1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
     @inferred DiskArrays.DiskIndex(a_view6, (1:1, 1:1, 1:1, 1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
 end
+
+@testset "test broadcast over strings" begin
+    a = UnchunkedDiskArray(["a", "b", "c"])
+    @test all(a .== ["a", "b", "c"])
+end
