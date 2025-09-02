@@ -48,6 +48,26 @@ Important: Only declare your backend as thread-safe if:
 * The underlying storage system (files, network, etc.) supports concurrent access
 * No global state is modified during read operations
 
+## Implementing Threading Support for Disk Array Methods
+
+Add a (or rename the existing) single-threaded method using this signature:
+
+```
+function Base.myfun(::Type{SingleThreaded}, ...)
+```
+
+Write a threaded version using this signature:
+
+```
+function Base.myfun(::Type{MultiThreaded}, ...)
+```
+
+Add this additional method to automatically dispatch between the two:
+
+```
+Base.myfun(v::AbstractDiskArray, ...) = myfun(should_use_threading(v), ...)
+```
+
 ## Threaded Algorithms
 
 Currently supported threaded algorithms:
@@ -62,12 +82,12 @@ result = unique(my_disk_array)
 result = unique(x -> x % 10, my_disk_array)
 
 # Explicitly use threaded version
-result = unique(Val{true}(), f, my_disk_array)
+result = unique(MultiThreaded, f, my_disk_array)
 ```
 
 The threaded unique algorithm:
 
-* Processes each chunk in parallel using `Threads.@threads :greedy`
+* Processes each chunk in parallel using `Threads.@threads`
 * Combines results using a reduction operation
 * Falls back to single-threaded implementation for non-thread-safe backends
 

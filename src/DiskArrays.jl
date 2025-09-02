@@ -19,6 +19,7 @@ export AbstractDiskArray, eachchunk, ChunkIndex, ChunkIndices
 include("scalar.jl")
 include("chunks.jl")
 include("diskarray.jl")
+include("threading.jl")
 include("batchgetindex.jl")
 include("diskindex.jl")
 include("indexing.jl")
@@ -36,11 +37,9 @@ include("zip.jl")
 include("show.jl")
 include("cached.jl")
 include("pad.jl")
-include("threading.jl")
 
-export ThreadingTrait, ThreadSafe, NotThreadSafe,
-       threading_trait, is_thread_safe,
-       enable_threading, threading_enabled
+export ThreadingTrait, ThreadSafe, NotThreadSafe, threading_trait, is_thread_safe,
+       AlgorithmTrait, SingleThreaded, MultiThreaded, enable_threading, threading_enabled
 
 # The all-in-one macro
 

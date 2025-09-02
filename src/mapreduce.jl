@@ -70,13 +70,13 @@ end
 Base.unique(v::AbstractDiskArray) = unique(should_use_threading(v), identity, v)
 Base.unique(f, v::AbstractDiskArray) = unique(should_use_threading(v), f, v)
 
-function Base.unique(::Val{false}, f, v::AbstractDiskArray)
+function Base.unique(::Type{SingleThreaded}, f, v::AbstractDiskArray)
     reduce((unique(f, v[c...]) for c in eachchunk(v))) do acc, u
         unique!(f, append!(acc, u))
     end
 end
 
-function Base.unique(::Val{true}, f, v::AbstractDiskArray)
+function Base.unique(::Type{MultiThreaded}, f, v::AbstractDiskArray)
     chunks = eachchunk(v)
     u = Vector{Vector{eltype(v)}}(undef, length(chunks))
     Threads.@threads for i in 1:length(chunks)

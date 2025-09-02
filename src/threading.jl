@@ -37,6 +37,27 @@ Check if a DiskArray supports thread-safe operations.
 """
 is_thread_safe(x) = threading_trait(x) isa ThreadSafe
 
+"""
+    AlgorithmTrait
+
+Trait to indicate whether a method is multithreaded or not
+"""
+abstract type AlgorithmTrait end
+
+"""
+    SingleThreaded()
+
+Indicates that a method uses just one thread
+"""
+struct SingleThreaded <: AlgorithmTrait  end
+
+"""
+    MultiThreaded()
+
+Indicates that a method uses all threads available
+"""
+struct MultiThreaded <: AlgorithmTrait  end
+
 # Global threading control
 const THREADING_ENABLED = Ref(true)
 
@@ -61,4 +82,4 @@ threading_enabled() = THREADING_ENABLED[]
 Determine if threading should be used for a given DiskArray.
 Returns true only if both global threading is enabled AND the backend is thread-safe.
 """
-should_use_threading(x) = Val(threading_enabled() && is_thread_safe(x))
+should_use_threading(x) = threading_enabled() && is_thread_safe(x) ? MultiThreaded : SingleThreaded

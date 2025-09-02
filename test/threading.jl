@@ -40,12 +40,12 @@ end
     regular_array = ChunkedDiskArray(rand(10, 10), (5, 5))
 
     DiskArrays.enable_threading()
-    @test DiskArrays.should_use_threading(thread_safe_array) == Val{true}()
-    @test DiskArrays.should_use_threading(regular_array) == Val{false}()
+    @test DiskArrays.should_use_threading(thread_safe_array) == MultiThreaded
+    @test DiskArrays.should_use_threading(regular_array) == SingleThreaded
 
     DiskArrays.enable_threading(false)
-    @test DiskArrays.should_use_threading(thread_safe_array) == Val{false}()
-    @test DiskArrays.should_use_threading(regular_array) == Val{false}()
+    @test DiskArrays.should_use_threading(thread_safe_array) == SingleThreaded
+    @test DiskArrays.should_use_threading(regular_array) == SingleThreaded
 
     # Reset to default
     DiskArrays.enable_threading()
