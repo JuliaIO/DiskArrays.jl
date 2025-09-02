@@ -91,6 +91,16 @@ The threaded unique algorithm:
 * Combines results using a reduction operation
 * Falls back to single-threaded implementation for non-thread-safe backends
 
+### count
+
+Similarly to `unique`, threads will be automatically used unless disabled, or
+can be explicitly used:
+
+```
+count([f], my_disk_array)
+count(MultiThreaded, f, my_disk_array)
+```
+
 ## Performance Considerations
 
 * Threading is most beneficial for arrays with many chunks

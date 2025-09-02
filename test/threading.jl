@@ -77,3 +77,34 @@ end
     @test sort(result_no_threading) == sort(expected)
     DiskArrays.enable_threading()  # Reset
 end
+
+@testset "Threaded count" begin
+    # Test with thread-safe array
+    data_int = [1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 1, 2, 3, 4, 5, 5, 6, 6, 6, 7]
+    f(x) = x % 3 == 0
+    data = Array(f.(data_int))  # instead of BitMatrix
+    reshape_data_int = reshape(data_int, 4, 5)
+    thread_safe_array_int = MockThreadSafeDiskArray(reshape_data_int, (2, 3))
+    reshape_data = Array(reshape(data, 4, 5))
+    thread_safe_array = MockThreadSafeDiskArray(reshape_data, (2, 3))
+
+    result = count(thread_safe_array)
+    expected = count(data)
+    @test result == expected
+
+    # Test with function
+    result_with_func = count(f, thread_safe_array_int)
+    expected_with_func = count(f, data_int)
+    @test result_with_func == expected_with_func
+
+    # Test fallback for non-thread-safe array
+    regular_array = ChunkedDiskArray(reshape_data, (2, 3))
+    result_fallback = count(regular_array)
+    @test result_fallback == expected
+
+    # Test with threading disabled
+    DiskArrays.enable_threading(false)
+    result_no_threading = count(thread_safe_array)
+    @test result_no_threading == expected
+    DiskArrays.enable_threading()  # Reset
+end
