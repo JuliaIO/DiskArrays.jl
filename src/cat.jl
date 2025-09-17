@@ -1,80 +1,123 @@
-
 """
     ConcatDiskArray <: AbstractDiskArray
     
     ConcatDiskArray(arrays)
 
 Joins multiple `AbstractArray`s or `AbstractDiskArray`s into
-a single disk array, using lazy concatination.
+a single disk array, using lazy concatination. Note that if some elements
+of `arrays` are `missing`, this array will be interpreted as a block containing 
+only missing elements. This can be useful when concatenating mosaics of tiles 
+where some tiles in are missing or when stacking arrays along a new dimension
+and some layers are missing.
 
 Returned from `cat` on disk arrays. 
 
 It is also useful on its own as it can easily concatenate an array of disk arrays.
 """
-struct ConcatDiskArray{T,N,P,C,HC} <: AbstractDiskArray{T,N}
+struct ConcatDiskArray{T,N,P,C,HC,ID} <: AbstractDiskArray{T,N}
     parents::P
     startinds::NTuple{N,Vector{Int}}
     size::NTuple{N,Int}
     chunks::C
     haschunks::HC
+    innerdims::Val{ID}
 end
-function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray{<:Any,N},M}) where {N,M}
-    T = mapreduce(eltype, promote_type, init=eltype(first(arrays)), arrays)
 
-    function othersize(x, id)
-        return (x[1:(id-1)]..., x[(id+1):end]...)
-    end
-    if N > M
-        newshape = (size(arrays)..., ntuple(_ -> 1, N - M)...)
-        arrays1 = reshape(arrays, newshape)
-        D = N
-    elseif N < M
-        arrays1 = map(arrays) do a
-            newshape = (size(a)..., ntuple(_ -> 1, M - N)...)
-            reshape(a, newshape)
+function ConcatDiskArray(arrays::AbstractArray{Union{<:AbstractArray,Missing}})
+    et = Base.nonmissingtype(eltype(arrays))
+    T = Union{Missing,eltype(et)}
+    N = ndims(arrays)
+    M = ndims(et)
+    _ConcatDiskArray(arrays, T, Val(N), Val(M))
+end
+
+function infer_eltypes(arrays)
+    foldl(arrays, init=(-1, Union{})) do (M, T), a
+        if a isa AbstractArray
+            M == -1 || ndims(a) == M || throw(ArgumentError("All arrays to concatenate must have equal ndims"))
+            M = ndims(a)
         end
+            (M, promote_type(eltype(a), T))
+        end
+    end
+
+function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray})
+    N = ndims(arrays)
+    T = eltype(eltype(arrays))
+    if !isconcretetype(T)
+        M,T = infer_eltypes(arrays)
+    else
+        M = ndims(eltype(arrays))
+    end
+    _ConcatDiskArray(arrays, T, Val(N), Val(M))
+end
+function ConcatDiskArray(arrays::AbstractArray)
+    N = ndims(arrays)
+    M,T = infer_eltypes(arrays)
+    _ConcatDiskArray(arrays, T, Val(N), Val(M))
+end
+
+
+function _ConcatDiskArray(arrays, T, ::Val{N}, ::Val{M}) where {N,M}
+    if N < M
+        newshape = extenddims(size(arrays), ntuple(_ -> 1, M), 1)
+        arrays1 = reshape(arrays, newshape)
         D = M
     else
         arrays1 = arrays
-        D = M
+        D = N
     end
-    arraysizes = map(size, arrays1)
-    si = ntuple(D) do id
-        a = reduce(arraysizes; dims=id, init=ntuple(zero, D)) do i, j
-            if all(iszero, i)
-                j
-            elseif othersize(i, id) == othersize(j, id)
-                j
-            else
-                error("Dimension sizes don't match")
-            end
-        end
-        I = ntuple(D) do i
-            i == id ? Colon() : 1
-        end
-        ari = map(i -> i[id], arraysizes[I...])
-        sl = sum(ari)
-        r = cumsum(ari)
-        pop!(pushfirst!(r, 0))
-        r .+ 1, sl
-    end
+    ConcatDiskArray(arrays1::AbstractArray, T, Val(D), Val(M))
+end
+function ConcatDiskArray(arrays1::AbstractArray, T, ::Val{D},::Val{ID}) where {D,ID}
+    startinds, sizes = arraysize_and_startinds(arrays1)
 
-    startinds = map(first, si)
-    sizes = map(last, si)
-
-    chunks = concat_chunksize(D, arrays1)
+    chunks = concat_chunksize(arrays1)
     hc = Chunked(batchstrategy(chunks))
 
-    return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc)}(arrays1, startinds, sizes, chunks, hc)
-end
-function ConcatDiskArray(arrays::AbstractArray)
-    # Validate array eltype and dimensionality
-    all(a -> ndims(a) == ndims(first(arrays)), arrays) ||
-        error("Arrays don't have the same dimensions")
-    return error("Should not be reached")
+    return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc),ID}(arrays1, startinds, sizes, chunks, hc,Val(ID))
 end
 
+struct MissingTile{F}
+    fillvalue::F
+end
+Base.eltype(::Type{MissingTile{F}}) where F = F
+
+function extenddims(a::Tuple{Vararg{Any,N}}, b::Tuple{Vararg{Any,M}}, fillval) where {N,M} 
+    length(a) > length(b) && error("Wrong")
+    extenddims((a..., fillval), b, fillval)
+end
+extenddims(a::Tuple{Vararg{Any,N}}, _::Tuple{Vararg{Any,N}}, _) where {N} = a
+
 Base.size(a::ConcatDiskArray) = a.size
+
+function arraysize_and_startinds(arrays1)
+    sizes = map(i -> zeros(Int, i), size(arrays1))
+    for i in CartesianIndices(arrays1)
+        ai = arrays1[i]
+        ai isa MissingTile && continue
+        sizecur = extenddims(size(ai), size(arrays1), 1)
+        foreach(sizecur, i.I, sizes) do si, ind, sizeall
+            if sizeall[ind] == 0
+                #init the size
+                sizeall[ind] = si
+            elseif sizeall[ind] != si
+                throw(ArgumentError("Array sizes don't form a grid"))
+            end
+        end
+    end
+    r = map(sizes) do sizeall
+        #Replace missing sizes with size 1
+        replace!(sizeall, 0 => 1)
+        #Add starting 1
+        pushfirst!(sizeall, 1)
+        for i in 2:length(sizeall)
+            sizeall[i] = sizeall[i-1] + sizeall[i]
+        end
+        pop!(sizeall) - 1, sizeall
+    end
+    map(last, r), map(first, r)
+end
 
 # DiskArrays interface
 
@@ -84,19 +127,35 @@ haschunks(c::ConcatDiskArray) = c.haschunks
 function readblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     # Find affected blocks and indices in blocks
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
-        aout[outer_range...] = a.parents[I][array_range...]
+        vout = view(aout, outer_range...)
+        if I isa CartesianIndex
+            readblock!(a.parents[I], vout, array_range...)
+        else 
+            vout .= (I.fillvalue,)
+        end
     end
 end
 function writeblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
-        a.parents[I][array_range...] = aout[outer_range...]
+        data = view(aout, outer_range...)
+        if ismissing(I)
+            if !all(ismissing, data)
+                @warn "Trying to write data to missing array tile, skipping write"
+            end
+            return
+        else
+            writeblock!(a.parents[I], data, array_range...)
+        end
     end
 end
 
 # Utils
+ninnerdims(a::ConcatDiskArray) = ninnerdims(a.innerdims)
+ninnerdims(::Val{ID}) where ID = ID
 
 function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
     # Find affected blocks and indices in blocks
+    ID = ninnerdims(a)
     blockinds = map(inds, a.startinds, size(a.parents)) do i, si, s
         bi1 = max(searchsortedlast(si, first(i)), 1)
         bi2 = min(searchsortedfirst(si, last(i) + 1) - 1, s)
@@ -104,27 +163,59 @@ function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
     end
     map(CartesianIndices(blockinds)) do cI
         myar = a.parents[cI]
-        mysize = size(myar)
-        array_range = map(cI.I, a.startinds, mysize, inds) do ii, si, ms, indstoread
+        size_inferred = map(a.startinds, size(a), cI.I) do si, sa, ii
+            ii == length(si) ? sa - si[ii] + 1 : si[ii+1] - si[ii]
+        end
+        array_range = map(cI.I, a.startinds, size_inferred, inds) do ii, si, ms, indstoread
             max(first(indstoread) - si[ii] + 1, 1):min(last(indstoread) - si[ii] + 1, ms)
         end
         outer_range = map(cI.I, a.startinds, array_range, inds) do ii, si, ar, indstoread
             (first(ar)+si[ii]-first(indstoread)):(last(ar)+si[ii]-first(indstoread))
         end
-        # aout[outer_range...] = a.parents[cI][array_range...]
-        f(outer_range, array_range, cI)
+        #Shorten array range to shape of actual array
+        array_range = ntuple(j -> array_range[j], ID)
+        outer_range = fix_outerrangeshape(outer_range, array_range)
+        if myar isa MissingTile
+            f(outer_range, array_range, myar)
+        else
+            f(outer_range, array_range, cI)
+        end
     end
 end
+fix_outerrangeshape(outer_range, array_range) = fix_outerrangeshape((), outer_range, array_range)
+fix_outerrangeshape(res, outer_range, array_range) =
+    fix_outerrangeshape((res..., first(outer_range)), Base.tail(outer_range), Base.tail(array_range))
+fix_outerrangeshape(res, outer_range, ::Tuple{}) =
+    fix_outerrangeshape((res..., only(first(outer_range))), Base.tail(outer_range), ())
+fix_outerrangeshape(res, ::Tuple{}, ::Tuple{}) = res
 
-function concat_chunksize(N, parents)
-    oldchunks = map(eachchunk, parents)
-    newchunks = ntuple(N) do i
-        sliceinds = Base.setindex(ntuple(_ -> 1, N), :, i)
-        v = map(c -> c.chunks[i], oldchunks[sliceinds...])
+
+function concat_chunksize(parents)
+    newchunks = map(s -> Vector{Union{RegularChunks,IrregularChunks}}(undef, s), size(parents))
+    for i in CartesianIndices(parents)
+        array = parents[i]
+        array isa MissingTile && continue
+        chunks = eachchunk(array)
+        foreach(chunks.chunks, i.I, newchunks) do c, ind, newc
+            if !isassigned(newc, ind)
+                newc[ind] = c
+            elseif c != newc[ind]
+                throw(ArgumentError("Chunk sizes don't form a grid"))
+            end
+        end
+    end
+    newchunks = map(newchunks) do v
+        #Chunks that have not been set are from additional dimensions in the parent array shape
+        for i in eachindex(v)
+            if !isassigned(v, i)
+                v[i] = RegularChunks(1, 0, 1)
+            end
+        end
+        # Merge the chunks
         init = RegularChunks(approx_chunksize(first(v)), 0, 0)
         reduce(mergechunks, v; init=init)
     end
-
+    extenddims(newchunks, size(parents), RegularChunks(1, 0, 1))
     return GridChunks(newchunks...)
 end
 
