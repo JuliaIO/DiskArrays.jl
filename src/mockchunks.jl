@@ -27,7 +27,15 @@ The chunks argument can take one of the following forms:
 - a [`DiskArrays.GridChunks`](@ref) object
 - a tuple specifying the chunk size along each dimension, like `(10, 10, 1)` for a 3-D array
 """
-mockchunks(data::AbstractArray, chunks) = MockChunkedDiskArray(data, GridChunks(size(data), chunks))
+function mockchunks(data::AbstractArray, chunks)
+    gridchunks = if chunks isa GridChunks
+        chunks
+    else
+        GridChunks(data, chunks)
+    end
+    MockChunkedDiskArray(data, GridChunks(data, chunks))
+end
+
 
 Base.parent(A::MockChunkedDiskArray) = A.parent
 Base.size(A::MockChunkedDiskArray) = size(parent(A))
