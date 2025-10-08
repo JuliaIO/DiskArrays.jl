@@ -1132,3 +1132,12 @@ end
     @inferred DiskArrays.DiskIndex(a_view5, (1:1, 1:1, 1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
     @inferred DiskArrays.DiskIndex(a_view6, (1:1, 1:1, 1:1, 1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
 end
+
+@testset "mockchunks" begin
+    a =UnchunkedDiskArray(rand(10,10))
+    chunks = DiskArrays.RegularChunks.((5,5), (0,0), (10,10))
+    gchunks = DiskArrays.GridChunks(chunks)
+    a_chunked = DiskArrays.mockchunks(a, gchunks)
+    @test a_chunked isa DiskArrays.MockChunkedDiskArray
+    @test size(DiskArrays.eachchunk(a_chunked)) == (2,2)
+end
