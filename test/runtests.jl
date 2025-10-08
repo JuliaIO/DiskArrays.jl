@@ -1140,4 +1140,7 @@ end
     a_chunked = DiskArrays.mockchunks(a, gchunks)
     @test a_chunked isa DiskArrays.MockChunkedDiskArray
     @test size(DiskArrays.eachchunk(a_chunked)) == (2,2)
+    a_chunked_2 = DiskArrays.mockchunks(a, (2,2))
+    @test DiskArrays.haschunks(a_chunked_2) isa DiskArrays.Chunked
+    @test size(DiskArrays.eachchunk(a_chunked_2)) == (5,5)
 end
