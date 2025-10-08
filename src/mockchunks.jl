@@ -33,7 +33,7 @@ function mockchunks(data::AbstractArray, chunks)
     else
         GridChunks(data, chunks)
     end
-    MockChunkedDiskArray(data, GridChunks(data, chunks))
+    MockChunkedDiskArray(data, gridchunks)
 end
 
 
