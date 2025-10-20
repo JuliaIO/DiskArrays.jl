@@ -92,13 +92,6 @@ function reshape_index(a, default, replace)
     inew
 end
 
-#This is currently not type-stable, feel free to make an improved version through a PR
-function dropdims_disk(a; dims)
-    remaining_dims = setdiff(1:ndims(a), dims)
-    newshape = size(a)[remaining_dims]
-    reshape(a, newshape)
-end
-
 
 # Implementaion macro
 macro implement_reshape(t)
@@ -107,7 +100,6 @@ macro implement_reshape(t)
         function Base._reshape(A::$t, dims::NTuple{N,Int}) where {N}
             return reshape_disk(A, dims)
         end
-        Base.dropdims(A::$t; dims) = dropdims_disk(A; dims)
     end
 end
 
