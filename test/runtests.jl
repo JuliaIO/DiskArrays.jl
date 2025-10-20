@@ -990,11 +990,11 @@ end
         ch = ChunkedDiskArray(A, (128, 128, 2))
         ca = DiskArrays.CachedDiskArray(ch; maxsize=5, mmap=mm)
         # Read the original
-        @test sum(ca) == sum(ca)
+        @test sum(ca) == sum(ch)
         length(ca.cache)
 
         ca = DiskArrays.cache(ch; maxsize=5)
-        @test sum(ca) == sum(ca)
+        @test sum(ca) == sum(ch)
 
         @test ca[:, :, 1] == A[:, :, 1]
         @test ca[:, :, 2] == A[:, :, 2]
