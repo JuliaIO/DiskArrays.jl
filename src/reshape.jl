@@ -63,7 +63,7 @@ function reshape_disk(parent, dims)
                     continue
                 elseif d != s
                     error(
-                        "For DiskArrays, reshape is restricted to adding singleton dimensions",
+                        "For DiskArrays, reshape is restricted to adding or removing singleton dimensions",
                     )
                 else
                     iparent += 1
