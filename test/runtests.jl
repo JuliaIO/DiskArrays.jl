@@ -833,10 +833,23 @@ end
     a = data -> reshape(AccessCountDiskArray(data; chunksize=(5, 4, 2)), 10, 20, 2, 1)
     test_reductions(a)
     a = reshape(AccessCountDiskArray(reshape(1:20, 4, 5)), 4, 5, 1)
-    @test ReshapedDiskArray(a.parent, a.keepdim, a.newsize) === a
+    @test ReshapedDiskArray(a.parent, a.dmap, a.newsize) === a
     # Reshape with existing trailing 1s works
     a = reshape(AccessCountDiskArray(reshape(1:100, 5, 5, 2, 2, 1, 1)), 5, 5, 2, 2, 1, 1, 1)
     @test a[5, 5, 2, 2, 1, 1, 1] == 100
+    # Removing singleton dimensions and adding new ones works
+    a = ChunkedDiskArray(rand(10, 1, 5), (5, 1, 2))
+    ares = reshape(a, (1, 10, 5, 1, 1))
+    @test ndims(ares) == 5
+    @test size(ares) == (1, 10, 5, 1, 1,)
+    @test eachchunk(ares).chunks == (RegularChunks(1, 0, 1), RegularChunks(5, 0, 10), RegularChunks(2, 0, 5), RegularChunks(1, 0, 1), RegularChunks(1, 0, 1))
+    @test ares[1, :, :, 1, 1] == a[:, 1, :]
+    ares[1, 1:5, 1, 1, 1] = 1.0:5.0
+    @test ares[1, 1:5, 1, 1, 1] == 1.0:5.0
+    adrop = dropdims(a; dims=2)
+    @test adrop isa ReshapedDiskArray
+    @test size(adrop) == (10, 5)
+    @test adrop[:, :] == a[:, 1, :]
 end
 
 import Base.PermutedDimsArrays.invperm
