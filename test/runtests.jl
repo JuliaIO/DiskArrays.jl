@@ -1157,3 +1157,9 @@ end
     @test DiskArrays.haschunks(a_chunked_2) isa DiskArrays.Chunked
     @test size(DiskArrays.eachchunk(a_chunked_2)) == (5,5)
 end
+
+@testset "TiledChunkArray" begin
+    tiles = [fill(10x+y, 10,10) for x in 1:9, y in 1:9]
+    a = DiskArrays.TiledDiskArray((x,y) -> tiles[x,y], (90,90))
+    @test a[1,1] == 11
+end

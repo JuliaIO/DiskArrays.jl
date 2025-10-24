@@ -1,8 +1,7 @@
 import Mmap
 
-
 """
-    CachedDiskArray <: ChunkTiledDiskArray
+    CachedDiskArray <: AbstractChunkTiledDiskArray
 
     CachedDiskArray(A::AbstractArray; maxsize=1000, mmap=false)
 
@@ -14,7 +13,7 @@ to temproray files.
 
 Can also be called with `cache`, which can be extended for wrapper array types.
 """
-struct CachedDiskArray{T,N,A<:AbstractArray{T,N},C} <: ChunkTiledDiskArray{T,N}
+struct CachedDiskArray{T,N,A<:AbstractArray{T,N},C} <: AbstractChunkTiledDiskArray{T,N}
     parent::A
     cache::C
     mmap::Bool
