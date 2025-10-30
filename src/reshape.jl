@@ -20,73 +20,78 @@ rectangles in the parent array.
 However, we can support the case where only singleton dimensions are added, 
 later we could allow more special cases like joining two dimensions to one
 """
-struct ReshapedDiskArray{T,N,P<:AbstractArray{T},M} <: AbstractReshapedDiskArray{T,N,P,M}
+struct ReshapedDiskArray{T,N,P<:AbstractArray{T},DMAP} <: AbstractReshapedDiskArray{T,N,P,DMAP}
     parent::P
-    keepdim::NTuple{M,Int}
+    dmap::Val{DMAP}
     newsize::NTuple{N,Int}
 end
-
+dmap(::ReshapedDiskArray{<:Any,<:Any,<:Any,DMAP}) where DMAP = DMAP
 # Base methods
 Base.size(r::AbstractReshapedDiskArray) = r.newsize
 Base.parent(r::AbstractReshapedDiskArray) = r.parent
 
-keepdim(r::AbstractReshapedDiskArray) = r.keepdim
 
 # DiskArrays interface
-
 haschunks(a::AbstractReshapedDiskArray) = haschunks(parent(a))
 function eachchunk(a::AbstractReshapedDiskArray{<:Any,N}) where {N}
-    pchunks = eachchunk(parent(a))
-    inow::Int = 0
-    outchunks = ntuple(N) do idim
-        if in(idim, keepdim(a))
-            inow += 1
-            pchunks.chunks[inow]
-        else
-            RegularChunks(1, 0, size(a, idim))
-        end
-    end
-    return GridChunks(outchunks...)
+    pchunks = eachchunk(parent(a)).chunks
+    dm = dmap(a)
+    cnew = ntuple(i -> dm[i] == -1 ? RegularChunks(1, 0, 1) : pchunks[dm[i]], N)
+    return GridChunks(cnew...)
 end
 function DiskArrays.readblock!(a::AbstractReshapedDiskArray, aout, i::OrdinalRange...)
-    inew = tuple_tuple_getindex(i, keepdim(a))
+    inew = reshape_index(a, 1:1, i)
     DiskArrays.readblock!(parent(a), reshape(aout, map(length, inew)), inew...)
     return nothing
 end
 function DiskArrays.writeblock!(a::AbstractReshapedDiskArray, v, i::OrdinalRange...)
-    inew = tuple_tuple_getindex(i, keepdim(a))
+    inew = reshape_index(a, 1:1, i)
     DiskArrays.writeblock!(parent(a), reshape(v, map(length, inew)), inew...)
     return nothing
 end
 function reshape_disk(parent, dims)
     n = length(parent)
-    ndims(parent) > length(dims) &&
-        error("For DiskArrays, reshape is restricted to adding singleton dimensions")
-    prod(dims) == n || _throw_dmrs(n, "size", dims)
-    ipassed::Int = 0
-    keepdim = map(size(parent)) do s
+    prod(dims) == n || DiskArrays._throw_dmrs(n, "size", dims)
+    iparent::Int = 1
+    dmap = map(dims) do d
         while true
-            ipassed += 1
-            d = dims[ipassed]
+            s = size(parent, iparent)
             if d > 1
-                d != s && error(
-                    "For DiskArrays, reshape is restricted to adding singleton dimensions",
-                )
-                return ipassed
+                if s == 1
+                    #We are removing a singleton dimension
+                    iparent += 1
+                    continue
+                elseif d != s
+                    error(
+                        "For DiskArrays, reshape is restricted to adding or removing singleton dimensions",
+                    )
+                else
+                    iparent += 1
+                    return iparent - 1
+                end
             else
-                # For existing trailing 1s
-                d == s == 1 && return ipassed
+                return -1
             end
         end
     end
-    return ReshapedDiskArray{eltype(parent),length(dims),typeof(parent),ndims(parent)}(
-        parent, keepdim, dims
+    return ReshapedDiskArray{eltype(parent),length(dmap),typeof(parent),dmap}(
+        parent, Val(dmap), dims
     )
 end
 
-tuple_tuple_getindex(t, i) = _ttgi((), t, i...)
-_ttgi(o, t, i1, irest...) = _ttgi((o..., t[i1]), t, irest...)
-_ttgi(o, t, i1) = (o..., t[i1])
+function reshape_index(a, default, replace)
+    inew = map(_ -> default, size(parent(a)))
+    dm = dmap(a)
+    for ii in eachindex(dm)
+        m = dm[ii]
+        if m != -1
+            indx = replace[ii]
+            inew = Base.setindex(inew, indx, m)
+        end
+    end
+    inew
+end
+
 
 # Implementaion macro
 macro implement_reshape(t)

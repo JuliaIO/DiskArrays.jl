@@ -770,15 +770,31 @@ end
     @test Array(a_disk) == a
     @testset "copyto" begin
         x = zero(a)
-        copyto!(x, a_disk)
+        @test copyto!(x, a_disk) === x
         @test x == a
-        copyto!(x, CartesianIndices((1:3, 1:2)), a_disk, CartesianIndices((8:10, 8:9)))
+        @test copyto!(x, CartesianIndices((1:3, 1:2)), a_disk, CartesianIndices((8:10, 8:9))) === x
         # Test copyto! with zero length index
         x_empty = Matrix{Int64}(undef, 0, 2)
         copyto!(x_empty, CartesianIndices((1:0, 1:2)), a_disk, CartesianIndices((8:7, 8:9)))
         # copyto! with different length should throw an error
         @test_throws ArgumentError copyto!(x, CartesianIndices((1:1, 1:2)), a_disk, CartesianIndices((4:6, 8:9)))
-
+        # 5 arg copyto!
+        a_vec = collect(0x00:0x90)
+        test_dests = [
+            zero(a_vec),
+            view(zero(a_vec), 1:10),
+            zeros(length(a_vec)), # This tests type conversion
+        ]
+        for x in test_dests
+            local a_disk = AccessCountDiskArray(a_vec; chunksize=(15,))
+            x = zero(a_vec)
+            @test_throws ArgumentError copyto!(x, 1, a_disk, 1, -1)
+            @test copyto!(x, 1, a_disk, 1, 0) === x
+            @test copyto!(x, 6, a_disk, 3, 2) === x
+            @test x[6] == a_vec[3]
+            @test x[7] == a_vec[4]
+            @test getindex_count(a_disk) == 1
+        end
     end
 
     @test collect(reverse(a_disk)) == reverse(a)
@@ -804,7 +820,7 @@ end
     @test vcat(a_disk, a_disk) == vcat(a, a)
     @test hcat(a_disk, a_disk) == hcat(a, a)
     @test cat(a_disk, a_disk; dims=3) == cat(a, a; dims=3)
-    @test_broken circshift(a_disk, 2) == circshift(a, 2) # This one is super weird. The size changes.
+    @test circshift(a_disk, 2) == circshift(a, 2)
 end
 
 @testset "Reshape" begin
@@ -817,10 +833,23 @@ end
     a = data -> reshape(AccessCountDiskArray(data; chunksize=(5, 4, 2)), 10, 20, 2, 1)
     test_reductions(a)
     a = reshape(AccessCountDiskArray(reshape(1:20, 4, 5)), 4, 5, 1)
-    @test ReshapedDiskArray(a.parent, a.keepdim, a.newsize) === a
+    @test ReshapedDiskArray(a.parent, a.dmap, a.newsize) === a
     # Reshape with existing trailing 1s works
     a = reshape(AccessCountDiskArray(reshape(1:100, 5, 5, 2, 2, 1, 1)), 5, 5, 2, 2, 1, 1, 1)
     @test a[5, 5, 2, 2, 1, 1, 1] == 100
+    # Removing singleton dimensions and adding new ones works
+    a = ChunkedDiskArray(rand(10, 1, 5), (5, 1, 2))
+    ares = reshape(a, (1, 10, 5, 1, 1))
+    @test ndims(ares) == 5
+    @test size(ares) == (1, 10, 5, 1, 1,)
+    @test eachchunk(ares).chunks == (RegularChunks(1, 0, 1), RegularChunks(5, 0, 10), RegularChunks(2, 0, 5), RegularChunks(1, 0, 1), RegularChunks(1, 0, 1))
+    @test ares[1, :, :, 1, 1] == a[:, 1, :]
+    ares[1, 1:5, 1, 1, 1] = 1.0:5.0
+    @test ares[1, 1:5, 1, 1, 1] == 1.0:5.0
+    adrop = dropdims(a; dims=2)
+    @test adrop isa ReshapedDiskArray
+    @test size(adrop) == (10, 5)
+    @test adrop[:, :] == a[:, 1, :]
 end
 
 import Base.PermutedDimsArrays.invperm
@@ -974,11 +1003,11 @@ end
         ch = ChunkedDiskArray(A, (128, 128, 2))
         ca = DiskArrays.CachedDiskArray(ch; maxsize=5, mmap=mm)
         # Read the original
-        @test sum(ca) == sum(ca)
+        @test sum(ca) == sum(ch)
         length(ca.cache)
 
         ca = DiskArrays.cache(ch; maxsize=5)
-        @test sum(ca) == sum(ca)
+        @test sum(ca) == sum(ch)
 
         @test ca[:, :, 1] == A[:, :, 1]
         @test ca[:, :, 2] == A[:, :, 2]
@@ -1117,7 +1146,20 @@ end
     @inferred DiskArrays.DiskIndex(a_view6, (1:1, 1:1, 1:1, 1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
 end
 
+
 @testset "test broadcast over strings" begin
     a = UnchunkedDiskArray(["a", "b", "c"])
     @test all(a .== ["a", "b", "c"])
+end
+                
+@testset "mockchunks" begin
+    a =UnchunkedDiskArray(rand(10,10))
+    chunks = DiskArrays.RegularChunks.((5,5), (0,0), (10,10))
+    gchunks = DiskArrays.GridChunks(chunks)
+    a_chunked = DiskArrays.mockchunks(a, gchunks)
+    @test a_chunked isa DiskArrays.MockChunkedDiskArray
+    @test size(DiskArrays.eachchunk(a_chunked)) == (2,2)
+    a_chunked_2 = DiskArrays.mockchunks(a, (2,2))
+    @test DiskArrays.haschunks(a_chunked_2) isa DiskArrays.Chunked
+    @test size(DiskArrays.eachchunk(a_chunked_2)) == (5,5)
 end
