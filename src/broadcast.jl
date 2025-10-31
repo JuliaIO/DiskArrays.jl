@@ -64,8 +64,7 @@ function common_chunks(s, args...)
     if isempty(chunkedarrays)
         # Estimate chunk size for isbits
         if all(map(isbits ∘ eltype, args))
-            totalsize = sum(sizeof ∘ eltype, args)
-            return estimate_chunksize(s, totalsize)
+            return estimate_chunksize(s)
         else # Otherwise just use one huge chunk, we dont know what the object is
             return GridChunks(s, s)
         end
