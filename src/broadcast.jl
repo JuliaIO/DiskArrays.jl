@@ -62,15 +62,19 @@ function common_chunks(s, args...)
     all(ar -> isa(eachchunk(ar), GridChunks), chunkedarrays) ||
         error("Currently only chunks of type GridChunks can be merged by broadcast")
     if isempty(chunkedarrays)
-        totalsize = sum(sizeof ∘ eltype, args)
-        return estimate_chunksize(s, totalsize)
+        # Estimate chunk size for isbits
+        if all(map(isbits ∘ eltype, args))
+            return estimate_chunksize(s)
+        else # Otherwise just use one huge chunk, we dont know what the object is
+            return GridChunks(s, s)
+        end
     elseif length(chunkedarrays) == 1
         return eachchunk(only(chunkedarrays))
     else
         allchunks = collect(map(eachchunk, chunkedarrays))
         tt = ntuple(N) do n
             csnow = filter(allchunks) do cs
-            ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
+                ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
             end
             isempty(csnow) && return RegularChunks(1, 0, s[n])
             

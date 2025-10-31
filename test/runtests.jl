@@ -1146,6 +1146,12 @@ end
     @inferred DiskArrays.DiskIndex(a_view6, (1:1, 1:1, 1:1, 1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
 end
 
+
+@testset "test broadcast over strings" begin
+    a = UnchunkedDiskArray(["a", "b", "c"])
+    @test all(a .== ["a", "b", "c"])
+end
+                
 @testset "mockchunks" begin
     a =UnchunkedDiskArray(rand(10,10))
     chunks = DiskArrays.RegularChunks.((5,5), (0,0), (10,10))
