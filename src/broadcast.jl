@@ -28,6 +28,7 @@ Base.copy(a::BroadcastDiskArray) = copyto!(zeros(eltype(a), size(a)), a.broadcas
 
 Base.copy(broadcasted::Broadcasted{ChunkStyle{N}}) where {N} =
     BroadcastDiskArray(flatten(broadcasted))
+@inline Base.copy(broadcasted::Broadcasted{ChunkStyle{0}}) = broadcasted[CartesianIndex()]
 function Base.copyto!(dest::AbstractArray, broadcasted::Broadcasted{ChunkStyle{N}}) where {N}
     bcf = flatten(broadcasted)
     # Get a list of chunks to apply
