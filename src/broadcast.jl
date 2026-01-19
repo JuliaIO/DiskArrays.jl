@@ -42,6 +42,13 @@ function Base.copyto!(dest::AbstractArray, broadcasted::Broadcasted{ChunkStyle{N
     return dest
 end
 
+function Base.similar(::Broadcasted{ChunkStyle{0}}, ::Type{ElType}, dims) where {ElType}
+    return similar(Array{ElType, length(dims)}, dims)
+end
+function Base.similar(::Broadcasted{ChunkStyle{0}}, ::Type{Bool}, dims)
+    return similar(BitArray, dims)
+end
+
 # DiskArrays interface
 
 haschunks(a::BroadcastDiskArray) = Chunked()
