@@ -359,15 +359,15 @@ end
 
 # https://github.com/JuliaIO/DiskArrays.jl/issues/285
 @testset "basic array ops work for 0-dimensional arrays" begin
-    aval = 2
-    bval = 3
-    a = UnchunkedDiskArray(fill(aval))
-    b = UnchunkedDiskArray(fill(bval))
-    @testset for op in (-, +)
-        cval = op(aval, bval)
-        c = @inferred op(a, b)
-        @test c isa Array{typeof(cval),0}
-        @test c[] == cval
+    @testset "$(typeof(aval))" for (aval, bval) in ((2, 3), (true, false))
+        a = UnchunkedDiskArray(fill(aval))
+        b = UnchunkedDiskArray(fill(bval))
+        @testset for op in (-, +)
+            cval = op(aval, bval)
+            c = @inferred op(a, b)
+            @test c isa Array{typeof(cval),0}
+            @test c[] == cval
+        end
     end
 end
 
