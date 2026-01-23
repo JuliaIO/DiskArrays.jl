@@ -357,6 +357,28 @@ end
     @test a[] == 6
 end
 
+# https://github.com/JuliaIO/DiskArrays.jl/issues/285
+@testset "basic array ops work for 0-dimensional arrays" begin
+    @testset "Int" begin
+        aval, bval = 2, 3
+        a = UnchunkedDiskArray(fill(aval))
+        b = UnchunkedDiskArray(fill(bval))
+        @testset for op in (-, +)
+            cval = op(aval, bval)
+            c = @inferred op(a, b)
+            @test c isa Array{typeof(cval),0}
+            @test c[] == cval
+        end
+    end
+    @testset "Bool" begin
+        a = UnchunkedDiskArray(fill(true))
+        cval = true * false
+        c = @inferred a * false
+        @test c isa BitArray{0}
+        @test c[] == cval
+    end
+end
+
 @testset "Views" begin
     a = AccessCountDiskArray(zeros(Int, 4, 5, 1))
     test_view(a)
