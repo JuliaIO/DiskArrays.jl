@@ -91,6 +91,8 @@ end
         end
     end
 end
+_iterate_disk(a::AbstractArray{<:Any,0}, i::Int=1) = i == 1 ? (a[], 2) : nothing
+
 @noinline function _iterate_disk(a)
     # Get the indices for each chunk of data
     blockinds = BlockedIndices(eachchunk(a))
