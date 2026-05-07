@@ -83,6 +83,14 @@ function test_getindex(a)
     @test a[2:2:4, 1:2:5] == [2 10 18; 4 12 20]
     @test a[2:2:4, 1:2:5] == [2 10 18; 4 12 20]
     @test a[[1, 3, 4], [1, 3], 1] == [1 9; 3 11; 4 12]
+    @testset "boundscheck" begin
+        # size(a) (4,5,1)
+        @test_throws BoundsError a[6, 1, 1]
+        @test_throws BoundsError a[1, :, 99]
+        @test_throws BoundsError a[1, 1:2:99, 1]
+        @test_throws BoundsError a[CartesianIndex(2, 99), 1]
+        @test_throws BoundsError a[[1, 99], [1, 2], 1] 
+    end
     @testset "allowscalar" begin
         DiskArrays.allowscalar(false)
         @test_throws ErrorException a[2, 3, 1]

@@ -62,6 +62,7 @@ getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OffsetChunks}) =
     wrapchunk(a[nooffset(i)], eachchunk(a)[i.I])
 
 function getindex_disk!(out::Union{Nothing,AbstractArray}, a::AbstractArray, i...)
+    checkbounds(a, i...)
     # Check if we can write once or need to use multiple batches
     if need_batch(a, i)
         getindex_disk_batch!(out, a, i)
