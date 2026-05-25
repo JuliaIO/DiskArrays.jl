@@ -34,6 +34,7 @@ include("cat.jl")
 include("generator.jl")
 include("zip.jl")
 include("show.jl")
+include("chunktiledarray.jl")
 include("cached.jl")
 include("pad.jl")
 
