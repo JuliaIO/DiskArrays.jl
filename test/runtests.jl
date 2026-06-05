@@ -1,5 +1,5 @@
 using DiskArrays
-using DiskArrays: ReshapedDiskArray, PermutedDiskArray
+using DiskArrays: ReshapedDiskArray, PermutedDiskArray, DiskIndex
 using DiskArrays.TestTypes
 using Test
 using Statistics
@@ -1192,4 +1192,30 @@ end
     a_chunked_2 = DiskArrays.mockchunks(a, (2,2))
     @test DiskArrays.haschunks(a_chunked_2) isa DiskArrays.Chunked
     @test size(DiskArrays.eachchunk(a_chunked_2)) == (5,5)
+end
+
+
+@testset "ChunkIndex" begin
+    data = reshape(1:20, 4, 5)
+    a = AccessCountDiskArray(data, chunksize=(2, 2))
+    a[ChunkIndex(2, 2)] == a[eachchunk(a)[2, 2]...]
+    a[ChunkIndex(2, 3)] == a[eachchunk(a)[2, 3]...]
+    @test_throws BoundsError a[ChunkIndex(0, 1)]
+    @test_throws BoundsError a[ChunkIndex(3, 1)]
+    @test_throws BoundsError a[ChunkIndex(1, 4)]
+
+    chunkinds = ChunkIndices(a)
+    @test size(chunkinds) == (2, 3)
+    @test eltype(chunkinds) == ChunkIndex{2,DiskArrays.OneBasedChunks}
+    @test chunkinds[1, 1] == ChunkIndex(1, 1)
+
+    a_offset = a[ChunkIndex(2, 2, offset=true)]
+    @test a_offset isa DiskArrays.OffsetArray
+    @test size(a_offset) == (2, 2)
+    @test a_offset[3:4, 3:4] == a[3:4, 3:4]
+
+    chunkinds_offset = ChunkIndices(a, offset=true)
+    @test size(chunkinds_offset) == (2, 3)
+    @test eltype(chunkinds_offset) == ChunkIndex{2,DiskArrays.OffsetChunks}
+    @test chunkinds_offset[1, 1] == ChunkIndex(1, 1, offset=true)
 end
