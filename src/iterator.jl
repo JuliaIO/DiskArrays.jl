@@ -61,11 +61,9 @@ end
 # Implementaion macros
 
 # Nested iteration over chunks
-@noinline function _iterate_disk(
-    a::AbstractArray{T}, i::I
-) where {T,I<:Tuple{A,B,C}} where {A,B,C}
+@noinline function _iterate_disk(a::AbstractArray{T}, i) where {T}
     # Split the data, block indices and state from the iterator
-    currentdata::A, blockinds::B, state::C = i
+    currentdata, blockinds, state = i
     # And split the block stat into the chunk iterator and inner indices
     (chunkstate, innerstate) = state
     # Need to check now as state will be updated
@@ -84,10 +82,10 @@ end
             newchunk = newinnerstate.itr.indices
             # Get a new chunk of data
             newdata = OffsetArray(a[newchunk...], newinnerstate.itr)
-            return newdata[i]::T, (newdata, blockinds, newstate)::I
+            return newdata[i]::T, (newdata, blockinds, newstate)
         else
             # Current chunk still has values left to iterate over
-            return currentdata[i]::T, (currentdata, blockinds, newstate)::I
+            return currentdata[i]::T, (currentdata, blockinds, newstate)
         end
     end
 end
