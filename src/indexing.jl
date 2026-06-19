@@ -30,7 +30,6 @@ Converts indices to ranges and calls `DiskArrays.readblock!`
 """
 function getindex_disk(a::AbstractArray, i::Union{Integer,CartesianIndex}...)
     checkscalar(a, i)
-    checkbounds(a, i...)
     # Use a 1 x 1 block
     outputarray = Array{eltype(a)}(undef, map(_ -> 1, size(a))...)
     i = Base.to_indices(a, i)
@@ -309,7 +308,12 @@ macro implement_getindex(t)
     t = esc(t)
     quote
         DiskArrays.isdisk(::Type{<:$t}) = true
-        Base.getindex(a::$t, i...) = getindex_disk(a, i...)
+        
+        Base.@propagate_inbounds function Base.getindex(a::$t, i...) 
+            Base.@boundscheck checkbounds(a, i...)
+            return getindex_disk(a, i...)
+        end
+
         function DiskArrays.ChunkIndices(a::$t; offset=false)
             return ChunkIndices(
                 map(s -> 1:s, size(eachchunk(a))), offset ? OffsetChunks() : OneBasedChunks()
