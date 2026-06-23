@@ -61,7 +61,7 @@ end
 # Implementaion macros
 
 # Nested iteration over chunks
-@noinline function _iterate_disk(a::AbstractArray{T}, i) where {T}
+@noinline function _iterate_disk(a::AbstractArray{T}, i::I) where {T, I}
     # Split the data, block indices and state from the iterator
     currentdata, blockinds, state = i
     # And split the block stat into the chunk iterator and inner indices
