@@ -387,6 +387,15 @@ end
     end
 end
 
+# https://github.com/JuliaIO/DiskArrays.jl/issues/289
+@testset "iteration works for 0-dimensional arrays" begin
+    a = UnchunkedDiskArray(fill(42))
+    @test iterate(a) == (42, 2)
+    @test iterate(a, 1) == (42, 2)
+    @test iterate(a, 2) === nothing
+    @test collect(a) == fill(42)
+end
+
 @testset "Views" begin
     a = AccessCountDiskArray(zeros(Int, 4, 5, 1))
     test_view(a)
