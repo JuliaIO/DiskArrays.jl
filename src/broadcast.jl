@@ -28,6 +28,7 @@ Base.copy(a::BroadcastDiskArray) = copyto!(zeros(eltype(a), size(a)), a.broadcas
 
 Base.copy(broadcasted::Broadcasted{ChunkStyle{N}}) where {N} =
     BroadcastDiskArray(flatten(broadcasted))
+@inline Base.copy(broadcasted::Broadcasted{ChunkStyle{0}}) = broadcasted[CartesianIndex()]
 function Base.copyto!(dest::AbstractArray, broadcasted::Broadcasted{ChunkStyle{N}}) where {N}
     bcf = flatten(broadcasted)
     # Get a list of chunks to apply
@@ -40,6 +41,13 @@ function Base.copyto!(dest::AbstractArray, broadcasted::Broadcasted{ChunkStyle{N
         view(dest, chunk...) .= bcf.f.(argssub...)
     end
     return dest
+end
+
+function Base.similar(::Broadcasted{ChunkStyle{0}}, ::Type{ElType}, dims) where {ElType}
+    return similar(Array{ElType, length(dims)}, dims)
+end
+function Base.similar(::Broadcasted{ChunkStyle{0}}, ::Type{Bool}, dims)
+    return similar(BitArray, dims)
 end
 
 # DiskArrays interface
@@ -62,15 +70,19 @@ function common_chunks(s, args...)
     all(ar -> isa(eachchunk(ar), GridChunks), chunkedarrays) ||
         error("Currently only chunks of type GridChunks can be merged by broadcast")
     if isempty(chunkedarrays)
-        totalsize = sum(sizeof ∘ eltype, args)
-        return estimate_chunksize(s, totalsize)
+        # Estimate chunk size for isbits
+        if all(map(isbits ∘ eltype, args))
+            return estimate_chunksize(s)
+        else # Otherwise just use one huge chunk, we dont know what the object is
+            return GridChunks(s, s)
+        end
     elseif length(chunkedarrays) == 1
         return eachchunk(only(chunkedarrays))
     else
         allchunks = collect(map(eachchunk, chunkedarrays))
         tt = ntuple(N) do n
             csnow = filter(allchunks) do cs
-            ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
+                ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
             end
             isempty(csnow) && return RegularChunks(1, 0, s[n])
             

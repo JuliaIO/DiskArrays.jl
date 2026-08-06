@@ -49,3 +49,7 @@ Returns a trait for the chunk pattern of a dis array,
 """
 function haschunks end
 haschunks(x) = Unchunked()
+
+function Base.checkbounds(::Type{Bool}, a::AbstractDiskArray, i::ChunkIndex)
+    checkbounds(Bool, eachchunk(a), i.I)
+end

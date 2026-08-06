@@ -1,5 +1,5 @@
 using DiskArrays
-using DiskArrays: ReshapedDiskArray, PermutedDiskArray
+using DiskArrays: ReshapedDiskArray, PermutedDiskArray, DiskIndex
 using DiskArrays.TestTypes
 using Test
 using Statistics
@@ -83,6 +83,14 @@ function test_getindex(a)
     @test a[2:2:4, 1:2:5] == [2 10 18; 4 12 20]
     @test a[2:2:4, 1:2:5] == [2 10 18; 4 12 20]
     @test a[[1, 3, 4], [1, 3], 1] == [1 9; 3 11; 4 12]
+    @testset "boundscheck" begin
+        # size(a) (4,5,1)
+        @test_throws BoundsError a[6, 1, 1]
+        @test_throws BoundsError a[1, :, 99]
+        @test_throws BoundsError a[1, 1:2:99, 1]
+        @test_throws BoundsError a[CartesianIndex(2, 99), 1]
+        @test_throws BoundsError a[[1, 99], [1, 2], 1] 
+    end
     @testset "allowscalar" begin
         DiskArrays.allowscalar(false)
         @test_throws ErrorException a[2, 3, 1]
@@ -355,6 +363,37 @@ end
     @test a[] == 5
     a[1] = 6
     @test a[] == 6
+end
+
+# https://github.com/JuliaIO/DiskArrays.jl/issues/285
+@testset "basic array ops work for 0-dimensional arrays" begin
+    @testset "Int" begin
+        aval, bval = 2, 3
+        a = UnchunkedDiskArray(fill(aval))
+        b = UnchunkedDiskArray(fill(bval))
+        @testset for op in (-, +)
+            cval = op(aval, bval)
+            c = @inferred op(a, b)
+            @test c isa Array{typeof(cval),0}
+            @test c[] == cval
+        end
+    end
+    @testset "Bool" begin
+        a = UnchunkedDiskArray(fill(true))
+        cval = true * false
+        c = @inferred a * false
+        @test c isa BitArray{0}
+        @test c[] == cval
+    end
+end
+
+# https://github.com/JuliaIO/DiskArrays.jl/issues/289
+@testset "iteration works for 0-dimensional arrays" begin
+    a = UnchunkedDiskArray(fill(42))
+    @test iterate(a) == (42, 2)
+    @test iterate(a, 1) == (42, 2)
+    @test iterate(a, 2) === nothing
+    @test collect(a) == fill(42)
 end
 
 @testset "Views" begin
@@ -1146,6 +1185,12 @@ end
     @inferred DiskArrays.DiskIndex(a_view6, (1:1, 1:1, 1:1, 1:1, 1:1, 1:1), DiskArrays.NoBatch()) #DiskArrays.DiskIndex
 end
 
+
+@testset "test broadcast over strings" begin
+    a = UnchunkedDiskArray(["a", "b", "c"])
+    @test all(a .== ["a", "b", "c"])
+end
+                
 @testset "mockchunks" begin
     a =UnchunkedDiskArray(rand(10,10))
     chunks = DiskArrays.RegularChunks.((5,5), (0,0), (10,10))
@@ -1240,4 +1285,28 @@ end
     @test a1d[6:10] == tiles1d[2]
     @test a1d[11:15] == tiles1d[3]
     @test a1d[16:20] == tiles1d[4]
+
+@testset "ChunkIndex" begin
+    data = reshape(1:20, 4, 5)
+    a = AccessCountDiskArray(data, chunksize=(2, 2))
+    a[ChunkIndex(2, 2)] == a[eachchunk(a)[2, 2]...]
+    a[ChunkIndex(2, 3)] == a[eachchunk(a)[2, 3]...]
+    @test_throws BoundsError a[ChunkIndex(0, 1)]
+    @test_throws BoundsError a[ChunkIndex(3, 1)]
+    @test_throws BoundsError a[ChunkIndex(1, 4)]
+
+    chunkinds = ChunkIndices(a)
+    @test size(chunkinds) == (2, 3)
+    @test eltype(chunkinds) == ChunkIndex{2,DiskArrays.OneBasedChunks}
+    @test chunkinds[1, 1] == ChunkIndex(1, 1)
+
+    a_offset = a[ChunkIndex(2, 2, offset=true)]
+    @test a_offset isa DiskArrays.OffsetArray
+    @test size(a_offset) == (2, 2)
+    @test a_offset[3:4, 3:4] == a[3:4, 3:4]
+
+    chunkinds_offset = ChunkIndices(a, offset=true)
+    @test size(chunkinds_offset) == (2, 3)
+    @test eltype(chunkinds_offset) == ChunkIndex{2,DiskArrays.OffsetChunks}
+    @test chunkinds_offset[1, 1] == ChunkIndex(1, 1, offset=true)
 end

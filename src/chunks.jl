@@ -414,7 +414,7 @@ end
 Base.size(i::ChunkIndices) = length.(i.I)
 Base.getindex(A::ChunkIndices{N}, I::Vararg{Int,N}) where {N} =
     ChunkIndex(CartesianIndex(getindex.(A.I, I)), A.chunktype)
-Base.eltype(::Type{<:ChunkIndices{N}}) where {N} = ChunkIndex{N}
+Base.eltype(::Type{<:ChunkIndices{N,<:Any,O}}) where {N,O} = ChunkIndex{N,O}
 
 """
     element_size(a::AbstractArray)
