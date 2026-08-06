@@ -1285,6 +1285,7 @@ end
     @test a1d[6:10] == tiles1d[2]
     @test a1d[11:15] == tiles1d[3]
     @test a1d[16:20] == tiles1d[4]
+end
 
 @testset "ChunkIndex" begin
     data = reshape(1:20, 4, 5)
