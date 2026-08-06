@@ -1160,6 +1160,84 @@ end
 
 @testset "TiledChunkArray" begin
     tiles = [fill(10x+y, 10,10) for x in 1:9, y in 1:9]
-    a = DiskArrays.TiledDiskArray((x,y) -> tiles[x,y], (90,90))
-    @test a[1,1] == 11
+    a = DiskArrays.TiledDiskArray((x,y) -> tiles[x,y], Int, (9,9), (10,10))
+
+    @test size(a) == (90, 90)
+    @test ndims(a) == 2
+    @test eltype(a) == Int
+    @test DiskArrays.haschunks(a) == DiskArrays.Chunked()
+
+    ec = eachchunk(a)
+    @test ec isa DiskArrays.GridChunks
+    @test size(ec) == (9, 9)
+
+    # Chunk indexing (OneBasedChunks)
+    c11 = a[DiskArrays.ChunkIndex(CartesianIndex(1, 1))]
+    @test c11 == tiles[1, 1]
+    @test size(c11) == (10, 10)
+
+    c99 = a[DiskArrays.ChunkIndex(CartesianIndex(9, 9))]
+    @test c99 == tiles[9, 9]
+
+    c25 = a[DiskArrays.ChunkIndex(CartesianIndex(2, 5))]
+    @test c25 == tiles[2, 5]
+
+    c_offset = a[DiskArrays.ChunkIndex(CartesianIndex(2, 3); offset=true)]
+    @test sum(c_offset) == sum(tiles[2, 3])
+    @test axes(c_offset)[1] == 11:20
+    @test axes(c_offset)[2] == 21:30
+    @test c_offset[11, 21] == tiles[2, 3][1, 1]
+
+    # Scalar getindex
+    @test a[1, 1] == 11
+    @test a[10, 10] == 11
+    @test a[11, 1] == 21
+    @test a[1, 11] == 12
+    @test a[90, 90] == 99
+    @test a[50, 50] == 55
+    @test_throws BoundsError a[0, 1]
+    @test_throws BoundsError a[91, 1]
+
+    # Slice getindex (exercises readblock! path)
+    @test a[1:10, 1:10] == tiles[1, 1]
+    @test a[11:20, 1:10] == tiles[2, 1]
+    @test a[1:10, 11:20] == tiles[1, 2]
+    @test a[1:20, 1:10] == vcat(tiles[1, 1], tiles[2, 1])
+    @test a[1:10, 1:20] == hcat(tiles[1, 1], tiles[1, 2])
+    @test a[:, 1] == repeat(11:10:91, inner=10)
+
+    # CartesianIndex
+    @test a[CartesianIndex(50, 50)] == 55
+    @test a[CartesianIndex(1, 1)] == 11
+    @test a[CartesianIndex(90, 90)] == 99
+
+    # Cross-tile slice (spans 4 tiles)
+    cross = a[5:15, 5:15]
+    @test size(cross) == (11, 11)
+    @test cross[1:6, 1:6] == tiles[1, 1][5:10, 5:10]
+    @test cross[7:11, 1:6] == tiles[2, 1][1:5, 5:10]
+    @test cross[1:6, 7:11] == tiles[1, 2][5:10, 1:5]
+    @test cross[7:11, 7:11] == tiles[2, 2][1:5, 1:5]
+
+    # Linear indexing (column-major: cols 1-10 use tile(1..9,1), cols 11-20 use tile(1..9,2), ...)
+    @test a[:] == reduce(vcat, [repeat(repeat((10+y):10:(90+y), inner=10), 10) for y in 1:9])
+
+    # 1D TiledDiskArray
+    tiles1d = [fill(i, 5) for i in 1:4]
+    a1d = DiskArrays.TiledDiskArray((x,) -> tiles1d[x], Int, (4,), (5,))
+    @test size(a1d) == (20,)
+    @test ndims(a1d) == 1
+    @test eltype(a1d) == Int
+    @test DiskArrays.haschunks(a1d) == DiskArrays.Chunked()
+    @test size(eachchunk(a1d)) == (4,)
+    @test a1d[1] == 1
+    @test a1d[5] == 1
+    @test a1d[6] == 2
+    @test a1d[20] == 4
+    @test_throws BoundsError a1d[0]
+    @test_throws BoundsError a1d[21]
+    @test a1d[1:5] == tiles1d[1]
+    @test a1d[6:10] == tiles1d[2]
+    @test a1d[11:15] == tiles1d[3]
+    @test a1d[16:20] == tiles1d[4]
 end

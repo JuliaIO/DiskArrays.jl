@@ -13,9 +13,7 @@ function readblock!(A::AbstractChunkTiledDiskArray{T,N}, data, I...) where {T,N}
     chunk_indices = findchunk.(chunks.chunks, I)
     data_offset = OffsetArray(data, map(i -> first(i) - 1, I)...)
     foreach(CartesianIndices(chunk_indices)) do ci
-        @show ci
         chunkindex = ChunkIndex(ci; offset=true)
-        @show chunkindex
         chunk = A[chunkindex]
         # Find the overlapping indices
         inner_indices = map(axes(chunk), axes(data_offset)) do ax1, ax2
@@ -33,16 +31,16 @@ end
 Construct an array from a collection of tiles. 
 This needs a function to find the tile given a tile position and the overall size of the array.
 """
-struct TiledDiskArray{T,N} <: AbstractChunkTiledDiskArray{T,N}
-    tilefunction
-    tilenum
-    tilesizes
+struct TiledDiskArray{T,N,F,G<:GridChunks{N}} <: AbstractChunkTiledDiskArray{T,N}
+    tilefunction::F
+    tileshape::G
 end
+export TiledDiskArray
+TiledDiskArray(f,T,tilenum, tilesize) = TiledDiskArray{T,length(tilenum),typeof(f),typeof(GridChunks(tilenum.*tilesize, tilesize))}(f,GridChunks(tilenum.*tilesize, tilesize))
 
-
-Base.size(A::TiledDiskArray) = A.tilenum .* A.tilesizes
-eachchunk(A::TiledDiskArray) = DiskArrays.GridChunks(size(A), A.tilesizes)
-haschunks(A::TiledDiskArray) = Chunked()
+Base.size(A::TiledDiskArray) = map(arraysize_from_chunksize,A.tileshape.chunks)
+eachchunk(A::TiledDiskArray) = A.tileshape
+haschunks(::TiledDiskArray) = Chunked()
 
 function Base.getindex(A::TiledDiskArray, i::ChunkIndex{N,OffsetChunks}) where {N}
     tile = _getchunk(A,i)
