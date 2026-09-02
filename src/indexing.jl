@@ -34,7 +34,7 @@ function getindex_disk(a::AbstractArray, i::Union{Integer,CartesianIndex}...)
     outputarray = Array{eltype(a)}(undef, map(_ -> 1, size(a))...)
     i = Base.to_indices(a, i)
     # Convert indices to length 1 ranges
-    j = map(1:ndims(a)) do d
+    j = ntuple(ndims(a)) do d
         d <= length(i) ? (i[d]:i[d]) : 1:1
     end
     # Read the block
