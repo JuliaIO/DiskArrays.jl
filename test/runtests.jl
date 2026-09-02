@@ -588,6 +588,48 @@ end
 
     end
 
+    @testset "ConcatDiskArray with sized MissingTile (20×40)" begin
+        # Grid with sized MissingTile contributing its explicit size
+        a = zeros(10, 20)
+        b = ones(10, 20) * 2
+        c = fill(3.0, 10, 20)
+        conc = DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile(0.0, (10, 20))], 2, 2))
+        @test size(conc) == (20, 40)
+        @test all(isequal.(conc[1:10, 1:20], a))
+        @test all(isequal.(conc[11:20, 1:20], b))
+        @test all(isequal.(conc[1:10, 21:40], c))
+        @test all(isequal.(conc[11:20, 21:40], zeros(10, 20)))
+        @test eltype(conc) == Float64
+    end
+
+    @testset "MissingTile write error" begin
+        a = zeros(10, 20)
+        b = ones(10, 20)
+        c = fill(3.0, 10, 20)
+        conc = DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile(0.0, (10, 20))], 2, 2))
+        @test_throws ArgumentError conc[15, 25] = 99.0
+    end
+
+    @testset "MissingTile grid conflict error" begin
+        # MissingTile with a size that conflicts with the grid dimensions
+        a = zeros(10, 20)
+        b = ones(10, 20)
+        c = fill(3.0, 10, 20)
+        # MissingTile claims size (5, 5) but other tiles are 10×20
+        conc = try
+            DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile(0.0, (5, 5))], 2, 2))
+            :no_error
+        catch e
+            e
+        end
+        @test conc isa ArgumentError
+    end
+
+    @testset "ConcatDiskArray with missing value error" begin
+        a = zeros(10, 20)
+        @test_throws ArgumentError DiskArrays.ConcatDiskArray(reshape([a, missing], 2, 1))
+    end
+
 end
 
 @testset "Broadcast with length 1 and 0 final dim" begin
@@ -1005,8 +1047,8 @@ struct TestArray{T,N} <: AbstractArray{T,N} end
     DiskArrays.@implement_permutedims TestArray
     DiskArrays.@implement_subarray TestArray
     @test DiskArrays.isdisk(TestArray) == true
-    DiskArrays.@implement_diskarray TestArray2
-    @test DiskArrays.isdisk(TestArray2) == true
+    DiskArrays.@implement_diskarray TestArray
+    @test DiskArrays.isdisk(TestArray) == true
 
 end
 

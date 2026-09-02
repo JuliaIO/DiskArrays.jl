@@ -1,16 +1,15 @@
 """
     ConcatDiskArray <: AbstractDiskArray
-    
+
     ConcatDiskArray(arrays)
 
 Joins multiple `AbstractArray`s or `AbstractDiskArray`s into
-a single disk array, using lazy concatination. Note that if some elements
-of `arrays` are `missing`, this array will be interpreted as a block containing 
-only missing elements. This can be useful when concatenating mosaics of tiles 
-where some tiles in are missing or when stacking arrays along a new dimension
-and some layers are missing.
+a single disk array, using lazy concatenation. If some elements of `arrays`
+are `MissingTile`, the corresponding tile positions will return `fillvalue` when
+read. This is useful when concatenating mosaics of tiles where some tiles are
+missing or when stacking arrays along a new dimension and some layers are absent.
 
-Returned from `cat` on disk arrays. 
+Returned from `cat` on disk arrays.
 
 It is also useful on its own as it can easily concatenate an array of disk arrays.
 """
@@ -23,19 +22,13 @@ struct ConcatDiskArray{T,N,P,C,HC,ID} <: AbstractDiskArray{T,N}
     innerdims::Val{ID}
 end
 
-function ConcatDiskArray(arrays::AbstractArray{Union{<:AbstractArray,Missing}})
-    et = Base.nonmissingtype(eltype(arrays))
-    T = Union{Missing,eltype(et)}
-    N = ndims(arrays)
-    M = ndims(et)
-    _ConcatDiskArray(arrays, T, Val(N), Val(M))
-end
-
 function infer_eltypes(arrays)
     foldl(arrays, init=(-1, Union{})) do (M, T), a
         if a isa AbstractArray
             M == -1 || ndims(a) == M || throw(ArgumentError("All arrays to concatenate must have equal ndims"))
             M = ndims(a)
+        elseif a === missing
+            throw(ArgumentError("Cannot concatenate arrays containing missing values. Use MissingTile(fillvalue) to mark a tile as missing."))
         end
             (M, promote_type(eltype(a), T))
         end
@@ -78,13 +71,17 @@ function ConcatDiskArray(arrays1::AbstractArray, T, ::Val{D},::Val{ID}) where {D
     return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc),ID}(arrays1, startinds, sizes, chunks, hc,Val(ID))
 end
 
-struct MissingTile{F}
+struct MissingTile{F,S}
     fillvalue::F
+    size::S
 end
-Base.eltype(::Type{MissingTile{F}}) where F = F
+MissingTile(fillvalue::F) where F = MissingTile{F,Nothing}(fillvalue, nothing)
+MissingTile(fillvalue::F, size::NTuple{N,<:Integer}) where {F,N} =
+    MissingTile{F,typeof(size)}(fillvalue, size)
+Base.eltype(::Type{MissingTile{F,S}}) where {F,S} = F
 
 function extenddims(a::Tuple{Vararg{Any,N}}, b::Tuple{Vararg{Any,M}}, fillval) where {N,M} 
-    length(a) > length(b) && error("Wrong")
+    length(a) > length(b) && throw(ArgumentError("Tile dimensionality does not match grid dimensionality"))
     extenddims((a..., fillval), b, fillval)
 end
 extenddims(a::Tuple{Vararg{Any,N}}, _::Tuple{Vararg{Any,N}}, _) where {N} = a
@@ -95,8 +92,9 @@ function arraysize_and_startinds(arrays1)
     sizes = map(i -> zeros(Int, i), size(arrays1))
     for i in CartesianIndices(arrays1)
         ai = arrays1[i]
-        ai isa MissingTile && continue
-        sizecur = extenddims(size(ai), size(arrays1), 1)
+        ai isa MissingTile && (ai.size === nothing && continue)
+        size_ai = ai isa MissingTile ? ai.size : size(ai)
+        sizecur = extenddims(size_ai, size(arrays1), 1)
         foreach(sizecur, i.I, sizes) do si, ind, sizeall
             if sizeall[ind] == 0
                 #init the size
@@ -138,11 +136,8 @@ end
 function writeblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
         data = view(aout, outer_range...)
-        if ismissing(I)
-            if !all(ismissing, data)
-                @warn "Trying to write data to missing array tile, skipping write"
-            end
-            return
+        if I isa MissingTile
+            throw(ArgumentError("Cannot write through a missing tile"))
         else
             writeblock!(a.parents[I], data, array_range...)
         end
