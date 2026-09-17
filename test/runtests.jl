@@ -1311,3 +1311,30 @@ end
     @test eltype(chunkinds_offset) == ChunkIndex{2,DiskArrays.OffsetChunks}
     @test chunkinds_offset[1, 1] == ChunkIndex(1, 1, offset=true)
 end
+
+@testset "DiskColon indexes like Colon" begin
+    c = DiskArrays.DiskColon()
+    # Same result and same `readblock!`/`writeblock!` ranges as `:`
+    function sameaccess(f, data; chunksize)
+        a, b = (AccessCountDiskArray(copy(data); chunksize) for _ in 1:2)
+        f(a, :) == f(b, c) && getindex_log(a) == getindex_log(b) && setindex_log(a) == setindex_log(b)
+    end
+    v, m, t = collect(1:10), reshape(collect(1:20), 4, 5), reshape(collect(1:60), 3, 4, 5)
+    for f in ((a, i) -> a[i], (a, i) -> collect(view(a, i)), (a, i) -> (a[i] = 10:-1:1; a[i]))
+        @test sameaccess(f, v; chunksize=(3,))
+    end
+    for f in ((a, i) -> a[i], (a, i) -> a[i, i], (a, i) -> a[i, 2], (a, i) -> a[2:3, i], (a, i) -> a[[1, 4], i],
+              (a, i) -> a[i, [true, false, true, false, true]], (a, i) -> collect(view(a, i, 2)),
+              (a, i) -> view(a, 2:3, i)[i, 2], (a, i) -> (a[i, 2] = 1:4; a[i, i]))
+        @test sameaccess(f, m; chunksize=(2, 2))
+    end
+    for f in ((a, i) -> a[i], (a, i) -> a[i, i, i], (a, i) -> a[i, 2, i], (a, i) -> a[1, i, 2:3], (a, i) -> a[i, [1, 4], i],
+              (a, i) -> a[CartesianIndex(1, 2), i], (a, i) -> collect(view(a, i, 2, i)),
+              (a, i) -> (a[2, i, i] = zeros(Int, 4, 5); a[i, i, i]))
+        @test sameaccess(f, t; chunksize=(2, 2, 2))
+    end
+    @test_throws BoundsError AccessCountDiskArray(m)[c, 6]
+    @test to_indices(m, (c, 2)) == (1:4, 2)
+    @test to_indices(m, (c, 2))[1] isa DiskArrays.DiskSlice
+    @test parentindices(view(AccessCountDiskArray(m), c, 2))[1] isa DiskArrays.DiskSlice
+end
