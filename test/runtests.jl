@@ -1311,3 +1311,53 @@ end
     @test eltype(chunkinds_offset) == ChunkIndex{2,DiskArrays.OffsetChunks}
     @test chunkinds_offset[1, 1] == ChunkIndex(1, 1, offset=true)
 end
+
+@testset "RangeIndex reads ranges in blocks" begin
+    r = DiskArrays.RangeIndex(1:2, 6:8)
+    @test collect(r) == [1, 2, 6, 7, 8]
+    @test extrema(r) == (1, 8)
+    @test to_indices(zeros(8, 8), (r, 2)) == ([1, 2, 6, 7, 8], 2) && to_indices(1:8, (r,))[1] isa Vector{Int}
+    @test to_indices(view(zeros(8), :), (r,))[1] isa DiskArrays.RangeIndex
+    @test checkbounds(Bool, zeros(8), r) && !checkbounds(Bool, zeros(7), r)
+    @test r[2:4] == DiskArrays.RangeIndex(2:2, 6:7) && r[2:4] isa DiskArrays.RangeIndex
+    @test r[3:3] == DiskArrays.RangeIndex(6:6) && isempty(r[2:1])
+    @test_throws BoundsError r[6]
+    @test_throws ArgumentError DiskArrays.RangeIndex(6:8, 1:2)
+    @test_throws ArgumentError DiskArrays.RangeIndex(1:3, 2:4)
+    @test_throws ArgumentError DiskArrays.RangeIndex(1:0, 2:4)
+    m = reshape(collect(1:64), 8, 8)
+    # Batched (density_threshold=1.0 batches any gap): ChunkRead joins ranges in the same chunk,
+    # SubRanges reads each range, adjacent ranges always join
+    for (chunksize, batchstrategy, reads) in (
+            ((8, 8), DiskArrays.ChunkRead(density_threshold=1.0), [1:8]),
+            ((4, 8), DiskArrays.ChunkRead(density_threshold=1.0), [1:2, 6:8]),
+            ((2, 1), DiskArrays.ChunkRead(density_threshold=1.0), [1:2, 6:8]),
+            ((8, 8), DiskArrays.SubRanges(density_threshold=1.0), [1:2, 6:8]))
+        a = AccessCountDiskArray(copy(m); chunksize, batchstrategy)
+        @test a[r, 2] == m[collect(r), 2]
+        @test getindex_log(a) == [(rd, 2:2) for rd in reads]
+        @test a[r, r[1:3]] == m[collect(r), collect(r[1:3])]
+        @test a[2:3, r] == m[2:3, collect(r)]
+        @test view(a, r, 1:2)[2:4, :] == m[[2, 6, 7], 1:2]
+        a[r, 3] = 1:5
+        @test setindex_log(a) == [(rd, 3:3) for rd in reads]
+        @test a[:, 3] == [1, 2, 19, 20, 21, 3, 4, 5]
+        empty!(getindex_log(a))
+        @test a[DiskArrays.RangeIndex(1:3, 4:5), 1] == m[1:5, 1] && getindex_log(a) == [(1:5, 1:1)]
+    end
+    # Dense enough for the default threshold, the hull is read in one block, as for a vector
+    for batchstrategy in (DiskArrays.ChunkRead(), DiskArrays.SubRanges(), DiskArrays.NoBatch())
+        a = AccessCountDiskArray(copy(m); chunksize=(2, 8), batchstrategy)
+        @test a[r, 2] == m[collect(r), 2] && getindex_log(a) == [(1:8, 2:2)]
+        @test DiskArrays.need_batch(a, (r, 2)) == DiskArrays.need_batch(a, (collect(r), 2))
+        s = DiskArrays.RangeIndex(1:1, 8:8)
+        @test DiskArrays.need_batch(a, (s, 2)) == DiskArrays.need_batch(a, (collect(s), 2))
+    end
+    # A range spanning chunks joins the next range in its last chunk
+    s = DiskArrays.RangeIndex(1:5, 7:8)
+    @test DiskArrays.group_ranges(s.ranges, DiskArrays.RegularChunks(4, 0, 8), DiskArrays.ChunkRead()) == [1:2]
+    @test DiskArrays.group_ranges(s.ranges, DiskArrays.RegularChunks(4, 0, 8), DiskArrays.SubRanges()) == [1:1, 2:2]
+    # 1-d
+    v = AccessCountDiskArray(collect(1:10); chunksize=(2,), batchstrategy=DiskArrays.ChunkRead(density_threshold=1.0))
+    @test v[r] == [1, 2, 6, 7, 8] && getindex_log(v) == [(1:2,), (6:8,)]
+end
