@@ -8,7 +8,7 @@ function Base._mapreduce(f, op, ::IndexCartesian, v::AbstractDiskArray)
     end
 end
 function Base.mapreducedim!(f, op, R::AbstractArray, a::AbstractDiskArray)
-    diskarrays_mapreducedim_impl(f, op, R, a, get_backend(compute_backend))
+    diskarrays_mapreducedim_impl(f, op, R, a, get_backend(a))
 end
 
 function diskarrays_mapreducedim_impl(f, op, R, a::AbstractDiskArray, ::ComputeBackend)
@@ -50,7 +50,7 @@ function Base.mapfoldl_impl(f, op, nt::NamedTuple{(:init,)}, itr::AbstractDiskAr
 end
 
 Base.mapreduce(f, op, a::AbstractDiskArray; dims=:, init=Base._InitialValue(), kwargs...) =
-    diskarrays_mapreduce_impl(f, op, a, dims, init, get_backend(compute_backend); kwargs...)
+    diskarrays_mapreduce_impl(f, op, a, dims, init, get_backend(a); kwargs...)
 
 diskarrays_mapreduce_impl(f, op, a, dims, init, backend::ComputeBackend) =
     _diskarrays_mapreduce_impl(f, op, a, dims, init, backend)
@@ -79,7 +79,7 @@ for fname in (:sum, :prod, :all, :any, :minimum, :maximum)
     fnamedef = Symbol("_diskarrays_$(fname)_default")
     @eval begin
         function Base.$fname(f::Function, a::AbstractDiskArray; kwargs...)
-            $(fnameimpl)(f, a, get_backend(compute_backend); kwargs...)
+            $(fnameimpl)(f, a, get_backend(a); kwargs...)
         end
         Base.$fname(a::AbstractDiskArray; kwargs...) = Base.$fname(identity, a; kwargs...)
 
@@ -100,7 +100,7 @@ for fname in (:sum, :prod, :all, :any, :minimum, :maximum)
 end
 
 Base.count(v::AbstractDiskArray) = count(identity, v::AbstractDiskArray)
-Base.count(f, v::AbstractDiskArray) = diskarrays_count_impl(f, v, get_backend(compute_backend))
+Base.count(f, v::AbstractDiskArray) = diskarrays_count_impl(f, v, get_backend(v))
 function diskarrays_count_impl(f, v::AbstractDiskArray, ::DefaultBackend)
     sum(eachchunk(v)) do chunk
         count(f, v[chunk...])
@@ -108,7 +108,7 @@ function diskarrays_count_impl(f, v::AbstractDiskArray, ::DefaultBackend)
 end
 
 Base.unique(v::AbstractDiskArray) = unique(identity, v)
-Base.unique(f, v::AbstractDiskArray) = diskarrays_unique_impl(f, v, get_backend(compute_backend))
+Base.unique(f, v::AbstractDiskArray) = diskarrays_unique_impl(f, v, get_backend(v))
 function diskarrays_unique_impl(f, v::AbstractDiskArray, ::DefaultBackend)
     reduce((unique(f, v[c...]) for c in eachchunk(v))) do acc, u
         unique!(f, append!(acc, u))
@@ -117,7 +117,7 @@ end
 
 
 function Base.extrema(f::Function, a::AbstractDiskArray; kwargs...)
-    diskarrays_extrema_impl(f, a, get_backend(compute_backend); kwargs...)
+    diskarrays_extrema_impl(f, a, get_backend(a); kwargs...)
 end
 Base.extrema(a::AbstractDiskArray; kwargs...) = extrema(identity, a; kwargs...)
 

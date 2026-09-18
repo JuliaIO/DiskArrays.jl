@@ -174,12 +174,12 @@ macro implement_broadcast(t)
     t = esc(t)
     quote
         # Broadcasting with a DiskArray on LHS
-        Base.copyto!(dest::$t, bc::Broadcasted{Nothing}) = diskarrays_coptyo!(dest, bc, get_backend(compute_backend))
+        Base.copyto!(dest::$t, bc::Broadcasted{Nothing}) = diskarrays_coptyo!(dest, bc, get_backend(dest))
         Base.BroadcastStyle(T::Type{<:$t}) = diskarrays_broadcaststyle(T, get_backend(compute_backend))
         function DiskArrays.subsetarg(arg::$t, ranges)
             ashort = maybeonerange(size(arg), ranges)
             return arg[ashort...]
         end
-        Base.fill!(dest::$t, value) = diskarrays_fill!(dest, value, get_backend(compute_backend))
+        Base.fill!(dest::$t, value) = diskarrays_fill!(dest, value, get_backend(dest))
     end
 end

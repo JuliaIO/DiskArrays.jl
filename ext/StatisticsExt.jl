@@ -1,9 +1,9 @@
 module StatisticsExt
 import Statistics
-import DiskArrays: AbstractDiskArray, DefaultBackend, get_backend, compute_backend, diskarrays_mean_impl
+import DiskArrays: AbstractDiskArray, DefaultBackend, get_backend, diskarrays_mean_impl
 
 function Statistics.mean(f::Function, a::AbstractDiskArray; kwargs...)
-    diskarrays_mean_impl(f, a, get_backend(compute_backend); kwargs...)
+    diskarrays_mean_impl(f, a, get_backend(a); kwargs...)
 end
 Statistics.mean(a::AbstractDiskArray; kwargs...) = Statistics.mean(identity, a; kwargs...)
 

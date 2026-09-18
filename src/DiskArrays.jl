@@ -14,7 +14,7 @@ using Base: tail
     read(path, String)
 end DiskArrays
 
-export AbstractDiskArray, eachchunk, ChunkIndex, ChunkIndices, backend,
+export AbstractDiskArray, eachchunk, ChunkIndex, ChunkIndices, backend, withbackend,
     diskarrays_sum_impl, diskarrays_mapreduce_impl, diskarrays_mapreducedim_impl
 
 include("scalar.jl")
@@ -39,6 +39,7 @@ include("show.jl")
 include("chunktiledarray.jl")
 include("cached.jl")
 include("pad.jl")
+include("withbackend.jl")
 
 # The all-in-one macro
 
@@ -85,6 +86,10 @@ end
 
 # And we define the test types
 include("util/testtypes.jl")
+
+function __init__()
+    Base.Experimental.register_error_hint(_backend_error_hint, MethodError)
+end
 
 
 end # module

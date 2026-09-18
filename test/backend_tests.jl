@@ -148,36 +148,53 @@ end
     test_backend_dispatch()
 
 Test that the backend dispatch mechanism works: a custom `ComputeBackend`
-subtype can intercept `diskarrays_*_impl` calls and the `DynamicBackend`
-path routes correctly. Skips when the active backend is not `"dynamic"`.
+subtype attached with `withbackend` intercepts `diskarrays_*_impl` calls,
+also through wrapper arrays, and `DynamicBackend` dispatch is static.
 """
 function test_backend_dispatch()
-    if DiskArrays.backend != "dynamic"
-        @test_skip "Backend dispatch tests require backend preference set to \"dynamic\""
-        return
-    end
-
     tb = TestBackend()
     @test tb isa DiskArrays.ComputeBackend
     @test tb.call_count[] == 0
 
-    # Inject the test backend into the DynamicBackend
-    DiskArrays.compute_backend.current_backend = tb
-
     a = AccessCountDiskArray([1.0, 2.0, 3.0, 4.0, 5.0], chunksize=(2,))
+    @test DiskArrays.get_backend(a) === DiskArrays.get_backend(DiskArrays.compute_backend)
+    wa = withbackend(a, tb)
+    @test wa == a
+    @test DiskArrays.eachchunk(wa) == DiskArrays.eachchunk(a)
+    @test DiskArrays.get_backend(wa) === tb
+    # The backend is found through wrappers
+    @test DiskArrays.get_backend(view(wa, 1:3)) === tb
 
-    result = sum(a)
-    @test result == 15.0
-    @test tb.call_count[] >= 1
+    @test sum(wa) == 15.0
+    @test tb.call_count[] == 1
+    # The global backend is untouched
+    @test sum(a) == 15.0
+    @test tb.call_count[] == 1
 
-    # Reset and test with function argument
     reset_test_backend(tb)
-    result = sum(x -> 2x, a)
-    @test result == 30.0
-    @test tb.call_count[] >= 1
+    @test sum(x -> 2x, wa) == 30.0
+    @test sum(view(wa, 1:3)) == 6.0
+    @test tb.call_count[] == 2
 
-    # Restore default backend
-    DiskArrays.compute_backend.current_backend = DiskArrays.DefaultBackend()
+    # DynamicBackend is a sum type of concrete backends, so dispatch is a branch
+    db = DiskArrays.DynamicBackend(DiskArrays.DefaultBackend())
+    @test DiskArrays.get_backend(db) === DiskArrays.DefaultBackend()
+    @test fieldtype(DiskArrays.DynamicBackend, 1) ==
+        Union{DiskArrays.DefaultBackend,DiskArrays.DiskArrayEngineBackend}
+    # and an entry point going through it stays type stable
+    dynsum(a, db) = DiskArrays.diskarrays_sum_impl(identity, a, DiskArrays.get_backend(db))
+    @test (@inferred dynsum(a, db)) == 15.0
+    db.current_backend = DiskArrays.DiskArrayEngineBackend()
+    @test DiskArrays.get_backend(db) === DiskArrays.DiskArrayEngineBackend()
+
+    # Error hint when DiskArrayEngine is not loaded
+    err = try
+        count(identity, withbackend(a .> 2, DiskArrays.DiskArrayEngineBackend()))
+    catch e
+        e
+    end
+    @test err isa MethodError
+    @test occursin("using DiskArrayEngine", sprint(showerror, err))
 end
 
 # ── Backend test suites ─────────────────────────────────────────────────────
