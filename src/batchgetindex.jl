@@ -109,7 +109,7 @@ numind(a::AbstractArray{Bool}) = sum(a)
 numind(a::Union{AbstractArray{<:Integer},AbstractArray{<:CartesianIndex}}) = length(a)
 
 # a view on a FillArray has non-numerical ids
-is_sparse_index(ids::Colon; density_threshold=0.5) = false
+is_sparse_index(ids::Union{Colon,Integer}; density_threshold=0.5) = false
 
 function is_sparse_index(ids; density_threshold=0.5)
     indexdensity = numind(ids) / span(ids)

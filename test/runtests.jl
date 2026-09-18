@@ -1312,29 +1312,34 @@ end
     @test chunkinds_offset[1, 1] == ChunkIndex(1, 1, offset=true)
 end
 
-@testset "DiskColon indexes like Colon" begin
-    c = DiskArrays.DiskColon()
-    # Same result and same `readblock!`/`writeblock!` ranges as `:`
-    function sameaccess(f, data; chunksize)
-        a, b = (AccessCountDiskArray(copy(data); chunksize) for _ in 1:2)
-        f(a, :) == f(b, c) && getindex_log(a) == getindex_log(b) && setindex_log(a) == setindex_log(b)
+@testset "RangeIndex groups ranges into blocks" begin
+    r = DiskArrays.RangeIndex(1:2, 6:8)
+    @test collect(r) == [1, 2, 6, 7, 8]
+    @test r[2:4] == DiskArrays.RangeIndex(2:2, 6:7) && r[2:4] isa DiskArrays.RangeIndex
+    @test_throws BoundsError r[6]
+    m = reshape(collect(1:64), 8, 8)
+    # Ranges are merged unless a whole chunk lies in the gap between them
+    for (chunksize, reads) in (((8, 8), [1:8]), ((4, 8), [1:8]), ((2, 1), [1:2, 6:8]), ((1, 1), [1:2, 6:8])),
+        batchstrategy in (DiskArrays.ChunkRead(), DiskArrays.SubRanges())
+        a = AccessCountDiskArray(copy(m); chunksize, batchstrategy)
+        @test a[r, 2] == m[collect(r), 2]
+        @test getindex_log(a) == [(rd, 2:2) for rd in reads]
+        @test a[r, r[1:3]] == m[collect(r), collect(r[1:3])]
+        @test a[2:3, r] == m[2:3, collect(r)]
+        @test view(a, r, 1:2)[2:4, :] == m[[2, 6, 7], 1:2]
+        a[r, 3] = 1:5
+        @test setindex_log(a) == [(rd, 3:3) for rd in reads]
+        @test a[:, 3] == [1, 2, 19, 20, 21, 3, 4, 5]
     end
-    v, m, t = collect(1:10), reshape(collect(1:20), 4, 5), reshape(collect(1:60), 3, 4, 5)
-    for f in ((a, i) -> a[i], (a, i) -> collect(view(a, i)), (a, i) -> (a[i] = 10:-1:1; a[i]))
-        @test sameaccess(f, v; chunksize=(3,))
-    end
-    for f in ((a, i) -> a[i], (a, i) -> a[i, i], (a, i) -> a[i, 2], (a, i) -> a[2:3, i], (a, i) -> a[[1, 4], i],
-              (a, i) -> a[i, [true, false, true, false, true]], (a, i) -> collect(view(a, i, 2)),
-              (a, i) -> view(a, 2:3, i)[i, 2], (a, i) -> (a[i, 2] = 1:4; a[i, i]))
-        @test sameaccess(f, m; chunksize=(2, 2))
-    end
-    for f in ((a, i) -> a[i], (a, i) -> a[i, i, i], (a, i) -> a[i, 2, i], (a, i) -> a[1, i, 2:3], (a, i) -> a[i, [1, 4], i],
-              (a, i) -> a[CartesianIndex(1, 2), i], (a, i) -> collect(view(a, i, 2, i)),
-              (a, i) -> (a[2, i, i] = zeros(Int, 4, 5); a[i, i, i]))
-        @test sameaccess(f, t; chunksize=(2, 2, 2))
-    end
-    @test_throws BoundsError AccessCountDiskArray(m)[c, 6]
-    @test to_indices(m, (c, 2)) == (1:4, 2)
-    @test to_indices(m, (c, 2))[1] isa DiskArrays.DiskSlice
-    @test parentindices(view(AccessCountDiskArray(m), c, 2))[1] isa DiskArrays.DiskSlice
+    # Unsorted and overlapping ranges, and a whole chunk skipped in the middle
+    a = AccessCountDiskArray(copy(m); chunksize=(2, 8))
+    s = DiskArrays.RangeIndex(7:8, 1:3, 2:3)
+    @test a[s, 1] == m[collect(s), 1]
+    @test getindex_log(a) == [(1:3, 1:1), (7:8, 1:1)]
+    @test DiskArrays.group_ranges(s.ranges, DiskArrays.RegularChunks(2, 0, 8)) == [[2, 3], [1]]
+    # A 1-d array and the NoBatch strategy, which reads the hull in one block
+    v = AccessCountDiskArray(collect(1:10); chunksize=(2,))
+    @test v[r] == [1, 2, 6, 7, 8] && getindex_log(v) == [(1:2,), (6:8,)]
+    n = AccessCountDiskArray(copy(m); chunksize=(2, 8), batchstrategy=DiskArrays.NoBatch())
+    @test n[r, 2] == m[collect(r), 2] && getindex_log(n) == [(1:8, 2:2)]
 end
