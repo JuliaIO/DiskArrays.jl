@@ -71,6 +71,12 @@ function ConcatDiskArray(arrays1::AbstractArray, T, ::Val{D},::Val{ID}) where {D
     return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc),ID}(arrays1, startinds, sizes, chunks, hc,Val(ID))
 end
 
+"""
+	struct MissingTile{F, S}
+	MissingTile(fillvalue, size)
+	
+Placeholder for a missing tile in a [`ConcatDiskArray`](@ref), which will have the value `fillvalue` if accessed.
+"""
 struct MissingTile{F,S}
     fillvalue::F
     size::S
