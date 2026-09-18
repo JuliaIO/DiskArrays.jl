@@ -51,7 +51,13 @@ function set_backend(new_backend::String)
     set_dynamic_backend!(b)
 end
 
+const _DAE_PKGID = Base.PkgId(Base.UUID("2d4b2e14-ccd6-4284-b8b0-2378ace7c126"), "DiskArrayEngine")
+
 function _backend_error_hint(io, exc, argtypes, kwargs)
     any(T -> T <: DiskArrayEngineBackend, argtypes) || return
-    print(io, "\n`DiskArrayEngineBackend` methods are implemented in DiskArrayEngine.jl, make sure it is loaded with `using DiskArrayEngine`.")
+    if haskey(Base.loaded_modules, _DAE_PKGID)
+        print(io, "\nDiskArrayEngine.jl does not implement this operation for `DiskArrayEngineBackend`.")
+    else
+        print(io, "\n`DiskArrayEngineBackend` methods are implemented in DiskArrayEngine.jl, make sure it is loaded with `using DiskArrayEngine`.")
+    end
 end
