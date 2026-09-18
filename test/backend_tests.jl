@@ -149,7 +149,7 @@ end
 
 Test that the backend dispatch mechanism works: a custom `ComputeBackend`
 subtype attached with `withbackend` intercepts `diskarrays_*_impl` calls,
-also through wrapper arrays, and `DynamicBackend` dispatch is static.
+also through wrapper arrays, and the global `DynamicBackend` dispatch is static.
 """
 function test_backend_dispatch()
     tb = TestBackend()
@@ -175,6 +175,14 @@ function test_backend_dispatch()
     @test sum(x -> 2x, wa) == 30.0
     @test sum(view(wa, 1:3)) == 6.0
     @test tb.call_count[] == 2
+
+    # The global backend can always be switched at runtime
+    @test DiskArrays.compute_backend isa DiskArrays.DynamicBackend
+    DiskArrays.set_dynamic_backend!(DiskArrays.DiskArrayEngineBackend())
+    @test DiskArrays.get_backend(a) === DiskArrays.DiskArrayEngineBackend()
+    DiskArrays.set_dynamic_backend!(DiskArrays.DefaultBackend())
+    @test DiskArrays.get_backend(a) === DiskArrays.DefaultBackend()
+    @test (@inferred sum(a)) == 15.0
 
     # DynamicBackend is a sum type of concrete backends, so dispatch is a branch
     db = DiskArrays.DynamicBackend(DiskArrays.DefaultBackend())

@@ -2,7 +2,7 @@ module StatisticsExt
 import Statistics
 import DiskArrays: AbstractDiskArray, DefaultBackend, get_backend, diskarrays_mean_impl
 
-function Statistics.mean(f::Function, a::AbstractDiskArray; kwargs...)
+function Statistics.mean(f::F, a::AbstractDiskArray; kwargs...) where {F<:Function}
     diskarrays_mean_impl(f, a, get_backend(a); kwargs...)
 end
 Statistics.mean(a::AbstractDiskArray; kwargs...) = Statistics.mean(identity, a; kwargs...)

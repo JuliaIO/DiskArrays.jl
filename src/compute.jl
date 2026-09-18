@@ -11,7 +11,7 @@ struct DefaultBackend <: ComputeBackend end
 # Backend type for DiskArrayEngine.jl, which implements the `diskarrays_*_impl` methods for it
 struct DiskArrayEngineBackend <: ComputeBackend end
 
-# Wrapper type that lets users switch backends dynamically as the program runs.
+# The global backend is always wrapped in a `DynamicBackend` so it can be switched at runtime.
 # The field is a small Union of concrete types, so dispatch on `get_backend` is
 # union-split into a branch instead of a dynamic dispatch. Backends that are not
 # known to DiskArrays can be attached to an array via `withbackend`.
@@ -20,41 +20,35 @@ mutable struct DynamicBackend <: ComputeBackend
 end
 get_backend(b::DynamicBackend) = b.current_backend
 
+# The preference only selects the backend that is active when DiskArrays is loaded
 const backend = @load_preference("backend", "default")
 
-function set_backend(new_backend::String)
-    if !(new_backend in ("default", "dynamic", "DiskArrayEngine"))
-        throw(ArgumentError("Invalid backend: \"$(new_backend)\""))
-    end
-
-    # Set it in our runtime values, as well as saving it to disk
-    @set_preferences!("backend" => new_backend)
-    @info("New backend set; restart your Julia session for this change to take effect!")
+function _backend_from_name(name::String)
+    name == "default" && return DefaultBackend()
+    name == "DiskArrayEngine" && return DiskArrayEngineBackend()
+    throw(ArgumentError("Invalid backend: \"$(name)\""))
 end
 
-function load_backend()
-    @static if backend == "default"
-        DefaultBackend()
-    elseif backend == "dynamic"
-        return DynamicBackend(DefaultBackend())
-    elseif backend == "DiskArrayEngine"
-        return DiskArrayEngineBackend()
-    else
-        return nothing
-    end
-end
-const compute_backend = load_backend()
+const compute_backend = DynamicBackend(_backend_from_name(backend))
 
 """
     set_dynamic_backend!(backend::Union{DefaultBackend,DiskArrayEngineBackend})
 
-Switch the active backend at runtime. Requires the `"dynamic"` backend preference,
-see [`set_backend`](@ref).
+Switch the active backend for the current session.
 """
-function set_dynamic_backend!(b::Union{DefaultBackend,DiskArrayEngineBackend})
-    compute_backend isa DynamicBackend ||
-        error("Runtime switching requires `DiskArrays.set_backend(\"dynamic\")`, current backend is \"$backend\"")
+set_dynamic_backend!(b::Union{DefaultBackend,DiskArrayEngineBackend}) =
     compute_backend.current_backend = b
+
+"""
+    set_backend(new_backend::String)
+
+Switch the active backend to `"default"` or `"DiskArrayEngine"` and save it as
+a preference, so it is also the active backend in future sessions.
+"""
+function set_backend(new_backend::String)
+    b = _backend_from_name(new_backend)
+    @set_preferences!("backend" => new_backend)
+    set_dynamic_backend!(b)
 end
 
 function _backend_error_hint(io, exc, argtypes, kwargs)

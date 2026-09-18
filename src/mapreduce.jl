@@ -78,7 +78,8 @@ for fname in (:sum, :prod, :all, :any, :minimum, :maximum)
     fnameimpl = Symbol("diskarrays_$(fname)_impl")
     fnamedef = Symbol("_diskarrays_$(fname)_default")
     @eval begin
-        function Base.$fname(f::Function, a::AbstractDiskArray; kwargs...)
+        # `F` forces specialization on `f`, which is only passed through here
+        function Base.$fname(f::F, a::AbstractDiskArray; kwargs...) where {F<:Function}
             $(fnameimpl)(f, a, get_backend(a); kwargs...)
         end
         Base.$fname(a::AbstractDiskArray; kwargs...) = Base.$fname(identity, a; kwargs...)
@@ -116,7 +117,7 @@ function diskarrays_unique_impl(f, v::AbstractDiskArray, ::DefaultBackend)
 end
 
 
-function Base.extrema(f::Function, a::AbstractDiskArray; kwargs...)
+function Base.extrema(f::F, a::AbstractDiskArray; kwargs...) where {F<:Function}
     diskarrays_extrema_impl(f, a, get_backend(a); kwargs...)
 end
 Base.extrema(a::AbstractDiskArray; kwargs...) = extrema(identity, a; kwargs...)
