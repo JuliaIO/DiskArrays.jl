@@ -1316,6 +1316,9 @@ end
     r = DiskArrays.RangeIndex(1:2, 6:8)
     @test collect(r) == [1, 2, 6, 7, 8]
     @test extrema(r) == (1, 8)
+    @test to_indices(zeros(8, 8), (r, 2)) == ([1, 2, 6, 7, 8], 2) && to_indices(1:8, (r,))[1] isa Vector{Int}
+    @test to_indices(view(zeros(8), :), (r,))[1] isa DiskArrays.RangeIndex
+    @test checkbounds(Bool, zeros(8), r) && !checkbounds(Bool, zeros(7), r)
     @test r[2:4] == DiskArrays.RangeIndex(2:2, 6:7) && r[2:4] isa DiskArrays.RangeIndex
     @test r[3:3] == DiskArrays.RangeIndex(6:6) && isempty(r[2:1])
     @test_throws BoundsError r[6]
