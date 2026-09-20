@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - main
+      # TODO remove: GitHub creates no merge ref for this stack while #308 conflicts
+      # with main, so `pull_request` runs never start
+      - as/backend_fallbacks
     tags: '*'
 jobs:
   test:
