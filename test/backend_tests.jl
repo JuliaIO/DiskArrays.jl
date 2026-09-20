@@ -189,16 +189,21 @@ function test_backend_dispatch()
     @test DiskArrays.get_backend(a) === DiskArrays.DiskArrayEngineBackend()
     DiskArrays.set_dynamic_backend!(DiskArrays.DefaultBackend())
     @test DiskArrays.get_backend(a) === DiskArrays.DefaultBackend()
-    @test (@inferred sum(a)) == 15.0
+    @test sum(a) == 15.0
 
     # DynamicBackend is a sum type of concrete backends, so dispatch is a branch
     db = DiskArrays.DynamicBackend(DiskArrays.DefaultBackend())
     @test DiskArrays.get_backend(db) === DiskArrays.DefaultBackend()
     @test fieldtype(DiskArrays.DynamicBackend, 1) ==
         Union{DiskArrays.DefaultBackend,DiskArrays.DiskArrayEngineBackend}
-    # and an entry point going through it stays type stable
+    # and going through it infers the same as a hard-coded backend. Not `@inferred`,
+    # the default `sum` over chunks is not inferrable on Julia 1.10 with any backend
     dynsum(a, db) = DiskArrays.diskarrays_sum_impl(identity, a, DiskArrays.get_backend(db))
-    @test (@inferred dynsum(a, db)) == 15.0
+    staticsum(a) = DiskArrays.diskarrays_sum_impl(identity, a, DiskArrays.DefaultBackend())
+    @test dynsum(a, db) == 15.0
+    @test only(Base.return_types(dynsum, (typeof(a), typeof(db)))) ==
+        only(Base.return_types(staticsum, (typeof(a),)))
+    @test only(Base.return_types(sum, (typeof(a),))) == only(Base.return_types(staticsum, (typeof(a),)))
     db.current_backend = DiskArrays.DiskArrayEngineBackend()
     @test DiskArrays.get_backend(db) === DiskArrays.DiskArrayEngineBackend()
 
