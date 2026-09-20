@@ -102,7 +102,7 @@ end
 
 Base.count(v::AbstractDiskArray) = count(identity, v::AbstractDiskArray)
 Base.count(f, v::AbstractDiskArray) = diskarrays_count_impl(f, v, get_backend(v))
-function diskarrays_count_impl(f, v::AbstractDiskArray, ::DefaultBackend)
+function diskarrays_count_impl(f, v::AbstractDiskArray, ::ComputeBackend)
     sum(eachchunk(v)) do chunk
         count(f, v[chunk...])
     end
@@ -110,7 +110,7 @@ end
 
 Base.unique(v::AbstractDiskArray) = unique(identity, v)
 Base.unique(f, v::AbstractDiskArray) = diskarrays_unique_impl(f, v, get_backend(v))
-function diskarrays_unique_impl(f, v::AbstractDiskArray, ::DefaultBackend)
+function diskarrays_unique_impl(f, v::AbstractDiskArray, ::ComputeBackend)
     reduce((unique(f, v[c...]) for c in eachchunk(v))) do acc, u
         unique!(f, append!(acc, u))
     end
@@ -122,7 +122,7 @@ function Base.extrema(f::F, a::AbstractDiskArray; kwargs...) where {F<:Function}
 end
 Base.extrema(a::AbstractDiskArray; kwargs...) = extrema(identity, a; kwargs...)
 
-diskarrays_extrema_impl(f, a::AbstractDiskArray, ::DefaultBackend; kwargs...) =
+diskarrays_extrema_impl(f, a::AbstractDiskArray, ::ComputeBackend; kwargs...) =
     invoke(extrema, Tuple{typeof(f),AbstractArray{eltype(a),ndims(a)}}, f, a; kwargs...)
 
 

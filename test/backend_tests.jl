@@ -202,9 +202,15 @@ function test_backend_dispatch()
     db.current_backend = DiskArrays.DiskArrayEngineBackend()
     @test DiskArrays.get_backend(db) === DiskArrays.DiskArrayEngineBackend()
 
-    # Error hint when DiskArrayEngine is not loaded
+    # Hooks that the backend does not overload fall back to the default implementation
+    @test count(>(2), wa) == 3
+    @test unique(wa) == unique(a)
+    @test extrema(wa) == (1.0, 5.0)
+    @test mean(wa) == 3.0
+
+    # Error hint when DiskArrayEngine is not loaded, `median` has no fallback
     err = try
-        count(identity, withbackend(a .> 2, DiskArrays.DiskArrayEngineBackend()))
+        DiskArrays.diskarrays_median_impl(identity, a, DiskArrays.DiskArrayEngineBackend())
     catch e
         e
     end

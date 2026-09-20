@@ -1,8 +1,7 @@
 name: CI
 on:
+  # All pull requests, so that stacked PRs are tested as well
   pull_request:
-    branches:
-      - main
   push:
     branches:
       - main
