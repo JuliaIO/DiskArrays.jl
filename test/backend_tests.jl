@@ -71,9 +71,11 @@ function test_specialized_reductions_default(data; chunksize=size(data))
         end
 
         @testset "unique" begin
-            @test_broken unique(da) == unique(mat)
-            @test_broken unique(identity, da) == unique(mat)
-            @test_broken unique(x -> x > 0, da) == unique(x -> x > 0, mat)
+            # Chunks are visited in a different order than the elements of an Array,
+            # so only the set of values (of `f`, which representative is first differs) is equal
+            @test issetequal(unique(da), unique(mat))
+            @test issetequal(unique(identity, da), unique(mat))
+            @test issetequal(map(x -> x > 0, unique(x -> x > 0, da)), map(x -> x > 0, unique(x -> x > 0, mat)))
         end
     end
 end
@@ -91,7 +93,7 @@ function test_statistics_reductions_default(data; chunksize=size(data))
         @testset "median" begin
             @test median(da) ≈ median(mat)
             @test median(da, dims=1) ≈ median(mat, dims=1)
-            @test median(da, dims=2) ≈ median(mat, dims=2)
+            ndims(mat) >= 2 && @test median(da, dims=2) ≈ median(mat, dims=2)
         end
     end
 end
@@ -110,15 +112,17 @@ function test_mapreduce_default(data; chunksize=size(data))
         @testset "mapreduce (init)" begin
             @test mapreduce(identity, +, da; init=0) ≈ mapreduce(identity, +, mat; init=0)
             @test mapreduce(identity, *, da; init=1) ≈ mapreduce(identity, *, mat; init=1)
-            @test mapreduce(identity, +, da; dims=1, init=0) ≈ mapreduce(identity, +, mat; dims=1, init=0)
+            @test mapreduce(identity, +, da; dims=1, init=0.0) ≈ mapreduce(identity, +, mat; dims=1, init=0.0)
         end
         @testset "mapreducedim!" begin
-            R = zeros(size(da, 1), size(da, 2), 1)
-            mapreducedim!(x -> 2x, +, R, da)
-            @test R ≈ mapreducedim!(x -> 2x, +, similar(R, size(da, 1), size(da, 2), 1), mat)
-            R2 = zeros(1, size(da, 2), size(da, 3))
-            mapreducedim!(x -> x^2, +, R2, da)
-            @test R2 ≈ mapreducedim!(x -> x^2, +, similar(R2), mat)
+            # Reduce over the last and over the first dimension
+            redsize(d) = ntuple(i -> i == d ? 1 : size(mat, i), ndims(mat))
+            R = zeros(redsize(ndims(mat)))
+            Base.mapreducedim!(x -> 2x, +, R, da)
+            @test R ≈ Base.mapreducedim!(x -> 2x, +, zero(R), mat)
+            R2 = zeros(redsize(1))
+            Base.mapreducedim!(x -> x^2, +, R2, da)
+            @test R2 ≈ Base.mapreducedim!(x -> x^2, +, zero(R2), mat)
         end
         @testset "mapfoldl (no init)" begin
             @test mapfoldl(x -> 2x, +, da) ≈ mapfoldl(x -> 2x, +, mat)
@@ -134,9 +138,12 @@ function test_mapreduce_default(data; chunksize=size(data))
             @test reduce(min, da) ≈ reduce(min, mat)
         end
         @testset "Base.cumsum/cumprod" begin
-            @test cumsum(da) ≈ cumsum(mat)
+            # Without `dims` these are only defined for vectors
+            if ndims(mat) == 1
+                @test cumsum(da) ≈ cumsum(mat)
+                @test cumprod(da) ≈ cumprod(mat)
+            end
             @test cumsum(da, dims=1) ≈ cumsum(mat, dims=1)
-            @test cumprod(da) ≈ cumprod(mat)
             @test cumprod(da, dims=1) ≈ cumprod(mat, dims=1)
         end
     end
@@ -272,8 +279,8 @@ end
 @testset "Edge cases: single element array" begin
     mat = rand(5)
     da = AccessCountDiskArray(mat; chunksize=(5,))
-    @test sum(da) == sum(mat)
-    @test prod(da) == prod(mat)
+    @test sum(da) ≈ sum(mat)
+    @test prod(da) ≈ prod(mat)
     @test minimum(da) == minimum(mat)
     @test maximum(da) == maximum(mat)
     @test any(da .> 0) == any(mat .> 0)
@@ -283,25 +290,25 @@ end
 @testset "Edge cases: small chunks, large array" begin
     mat = rand(100)
     da = AccessCountDiskArray(mat; chunksize=(1,))
-    @test sum(da) == sum(mat)
-    @test mean(da) == mean(mat)
-    @test count(da) == count(mat)
+    @test sum(da) ≈ sum(mat)
+    @test mean(da) ≈ mean(mat)
+    @test count(>(0.5), da) == count(>(0.5), mat)
 end
 
 @testset "Edge cases: all-same values" begin
     mat = fill(5.0, 10, 10)
     da = AccessCountDiskArray(mat; chunksize=(3, 3))
-    @test sum(da) == sum(mat)
-    @test prod(da) == prod(mat)
+    @test sum(da) ≈ sum(mat)
+    @test prod(da) ≈ prod(mat)
     @test minimum(da) == minimum(mat)
     @test maximum(da) == maximum(mat)
-    @test mean(da) == mean(mat)
+    @test mean(da) ≈ mean(mat)
 end
 
 @testset "Edge cases: negative values" begin
     mat = randn(10, 10)
     da = AccessCountDiskArray(mat; chunksize=(3, 3))
-    @test sum(da) == sum(mat)
+    @test sum(da) ≈ sum(mat)
     @test minimum(da) == minimum(mat)
     @test maximum(da) == maximum(mat)
     @test extrema(da) == extrema(mat)
