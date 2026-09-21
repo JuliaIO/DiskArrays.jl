@@ -14,8 +14,7 @@ using Base: tail
     read(path, String)
 end DiskArrays
 
-export AbstractDiskArray, eachchunk, ChunkIndex, ChunkIndices, backend, withbackend,
-    diskarrays_sum_impl, diskarrays_mapreduce_impl, diskarrays_mapreducedim_impl
+export AbstractDiskArray, eachchunk, ChunkIndex, ChunkIndices, backend, withbackend,MissingTile
 
 include("scalar.jl")
 include("chunks.jl")
@@ -24,6 +23,7 @@ include("diskarray.jl")
 include("batchgetindex.jl")
 include("diskindex.jl")
 include("indexing.jl")
+include("rangeindex.jl")
 include("array.jl")
 include("broadcast.jl")
 include("iterator.jl")

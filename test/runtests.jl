@@ -543,6 +543,134 @@ end
         @test slic isa Vector{Float64}
         @test slic == Float64[1, 2, 3, 4, 1, 2, 3, 4]
     end
+
+    @testset "Concat DiskArray with fill zero tiles" begin
+        a = zeros(Int, 3, 4)
+        b = ones(Int, 2, 4)
+        c = fill(2, 3, 5)
+        d = fill(0, 2, 5)
+        aconc = DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile(0)], 2, 2))
+        abase = [a c; b d]
+        @test all(isequal.(aconc[:, :], abase))
+        @test all(isequal.(aconc[3:4, 4:6], abase[3:4, 4:6]))
+        ch = DiskArrays.eachchunk(aconc)
+        @test ch.chunks[1] == [1:3, 4:5]
+        @test ch.chunks[2] == [1:4, 5:9]
+        @test eltype(aconc) == Int
+
+        a = ones(100, 50)
+        b = [rem(i.I[3], 5) == 0 ? DiskArrays.MissingTile(0) : a for i in CartesianIndices((1, 1, 100))]
+        b[1] = DiskArrays.MissingTile(0)
+        a_conc = DiskArrays.ConcatDiskArray(b)
+        ch = eachchunk(a_conc)
+        @test ch.chunks[1] == [1:100]
+        @test ch.chunks[2] == [1:50]
+        @test ch.chunks[3] === DiskArrays.RegularChunks(1, 0, 100)
+
+        @test all(isequal.(a_conc[2, 2, 1:5], [0, 1.0, 1.0, 1.0, 0]))
+        @test all(isequal.(a_conc[end, end, 95:100], [0, 1.0, 1.0, 1.0, 1.0, 0]))
+
+    end
+
+
+    @testset "Concat DiskArray with missing tiles" begin
+        a = zeros(Int, 3, 4)
+        b = ones(Int, 2, 4)
+        c = fill(2, 3, 5)
+        d = fill(missing, 2, 5)
+        aconc = DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile(missing)], 2, 2))
+        abase = [a c; b d]
+        @test all(isequal.(aconc[:, :], abase))
+        @test all(isequal.(aconc[3:4, 4:6], abase[3:4, 4:6]))
+        ch = DiskArrays.eachchunk(aconc)
+        @test ch.chunks[1] == [1:3, 4:5]
+        @test ch.chunks[2] == [1:4, 5:9]
+        @test eltype(aconc) == Union{Int, Missing}
+
+        a = ones(100, 50)
+        b = [rem(i.I[3], 5) == 0 ? DiskArrays.MissingTile(missing) : a for i in CartesianIndices((1, 1, 100))]
+        b[1] = DiskArrays.MissingTile(missing)
+        a_conc = DiskArrays.ConcatDiskArray(b)
+        ch = eachchunk(a_conc)
+        @test ch.chunks[1] == [1:100]
+        @test ch.chunks[2] == [1:50]
+        @test ch.chunks[3] === DiskArrays.RegularChunks(1, 0, 100)
+
+        @test all(isequal.(a_conc[2, 2, 1:5], [missing, 1.0, 1.0, 1.0, missing]))
+        @test all(isequal.(a_conc[end, end, 95:100], [missing, 1.0, 1.0, 1.0, 1.0, missing]))
+
+    end
+
+    @testset "Concat DiskArray with fill zero vector tiles" begin
+        a = fill([1,1], 3, 4)
+        b = fill([1,2], 2, 4)
+        c = fill([2,1], 3, 5)
+        d = fill([2,2], 2, 5)
+        aconc = DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile([2,2])], 2, 2))
+        abase = [a c; b d]
+        @test all(isequal.(aconc[:, :], abase))
+        @test all(isequal.(aconc[3:4, 4:6], abase[3:4, 4:6]))
+        ch = DiskArrays.eachchunk(aconc)
+        @test ch.chunks[1] == [1:3, 4:5]
+        @test ch.chunks[2] == [1:4, 5:9]
+        @test eltype(aconc) == Vector{Int}
+
+        a = fill([1,1], 100, 50)
+        b = [rem(i.I[3], 5) == 0 ? DiskArrays.MissingTile([0,0]) : a for i in CartesianIndices((1, 1, 100))]
+        b[1] = DiskArrays.MissingTile([0,0])
+        a_conc = DiskArrays.ConcatDiskArray(b)
+        ch = eachchunk(a_conc)
+        @test ch.chunks[1] == [1:100]
+        @test ch.chunks[2] == [1:50]
+        @test ch.chunks[3] === DiskArrays.RegularChunks(1, 0, 100)
+
+        @test all(isequal.(a_conc[2, 2, 1:5], [[0,0], [1,1],[1,1] , [1,1], [0,0]]))
+        @test all(isequal.(a_conc[end, end, 95:100], [[0,0], [1,1], [1,1], [1,1],[1,1], [0,0]]))
+
+    end
+
+    @testset "ConcatDiskArray with sized MissingTile (20×40)" begin
+        # Grid with sized MissingTile contributing its explicit size
+        a = zeros(10, 20)
+        b = ones(10, 20) * 2
+        c = fill(3.0, 10, 20)
+        conc = DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile(0.0, (10, 20))], 2, 2))
+        @test size(conc) == (20, 40)
+        @test all(isequal.(conc[1:10, 1:20], a))
+        @test all(isequal.(conc[11:20, 1:20], b))
+        @test all(isequal.(conc[1:10, 21:40], c))
+        @test all(isequal.(conc[11:20, 21:40], zeros(10, 20)))
+        @test eltype(conc) == Float64
+    end
+
+    @testset "MissingTile write error" begin
+        a = zeros(10, 20)
+        b = ones(10, 20)
+        c = fill(3.0, 10, 20)
+        conc = DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile(0.0, (10, 20))], 2, 2))
+        @test_throws ArgumentError conc[15, 25] = 99.0
+    end
+
+    @testset "MissingTile grid conflict error" begin
+        # MissingTile with a size that conflicts with the grid dimensions
+        a = zeros(10, 20)
+        b = ones(10, 20)
+        c = fill(3.0, 10, 20)
+        # MissingTile claims size (5, 5) but other tiles are 10×20
+        conc = try
+            DiskArrays.ConcatDiskArray(reshape([a, b, c, DiskArrays.MissingTile(0.0, (5, 5))], 2, 2))
+            :no_error
+        catch e
+            e
+        end
+        @test conc isa ArgumentError
+    end
+
+    @testset "ConcatDiskArray with missing value error" begin
+        a = zeros(10, 20)
+        @test_throws ArgumentError DiskArrays.ConcatDiskArray(reshape([a, missing], 2, 1))
+    end
+
 end
 
 @testset "Broadcast with length 1 and 0 final dim" begin
@@ -987,8 +1115,10 @@ struct TestArray{T,N} <: AbstractArray{T,N} end
     DiskArrays.@implement_array_methods TestArray
     DiskArrays.@implement_permutedims TestArray
     DiskArrays.@implement_subarray TestArray
+    @test DiskArrays.isdisk(TestArray) == true
     DiskArrays.@implement_diskarray TestArray
     @test DiskArrays.isdisk(TestArray) == true
+
 end
 
 # issue #123
@@ -1066,7 +1196,7 @@ end
 @testset "Padded disk arrays" begin
     M = (1:100) * (1:120)'
     A = cat(M, 2M, 3M, 4M; dims=3)
-    ch = ChunkedDiskArray(A, (128, 128, 2)) 
+    ch = ChunkedDiskArray(A, (128, 128, 2))
     pa = DiskArrays.pad(ch, ((10, 20), (30, 40), (1, 2)); fill=999)
     @test size(pa) == (130, 190, 7)
     # All outside
@@ -1096,9 +1226,9 @@ end
         @test DiskArrays._pad_offset(c1, (10, 10)) == DiskArrays.RegularChunks(10, 0, 120)
         @test DiskArrays._pad_offset(c1, (0, 0)) == c1
 
-        c2 = DiskArrays.IrregularChunks(chunksizes = [10, 10, 20, 30, 40])
+        c2 = DiskArrays.IrregularChunks(chunksizes=[10, 10, 20, 30, 40])
         #The following test would assume padding ends up in a separate chunk:
-        @test DiskArrays._pad_offset(c2, (5, 5)) == DiskArrays.IrregularChunks(chunksizes = [5, 10, 10, 20, 30, 40, 5])
+        @test DiskArrays._pad_offset(c2, (5, 5)) == DiskArrays.IrregularChunks(chunksizes=[5, 10, 10, 20, 30, 40, 5])
         @test DiskArrays._pad_offset(c2, (0, 0)) == c2
     end
 end
@@ -1157,10 +1287,10 @@ end
 end
 
 @testset "identity function" begin
-    a = ChunkedDiskArray(1:10 .> 3; chunksize=(3, ))
-	for fname in [:sum, :prod, :all, :any, :minimum, :maximum, :count]
-		@eval out = @capture_out @trace $fname($a) DiskArrays
-		@test occursin("DiskGenerator", out) == false
+    a = ChunkedDiskArray(1:10 .> 3; chunksize=(3,))
+    for fname in [:sum, :prod, :all, :any, :minimum, :maximum, :count]
+        @eval out = @capture_out @trace $fname($a) DiskArrays
+        @test occursin("DiskGenerator", out) == false
     end
     @test count(a) + count(!, a) == length(a)
 end
@@ -1311,4 +1441,54 @@ end
     @test size(chunkinds_offset) == (2, 3)
     @test eltype(chunkinds_offset) == ChunkIndex{2,DiskArrays.OffsetChunks}
     @test chunkinds_offset[1, 1] == ChunkIndex(1, 1, offset=true)
+end
+
+@testset "RangeIndex reads ranges in blocks" begin
+    r = DiskArrays.RangeIndex(1:2, 6:8)
+    @test collect(r) == [1, 2, 6, 7, 8]
+    @test extrema(r) == (1, 8)
+    @test to_indices(zeros(8, 8), (r, 2)) == ([1, 2, 6, 7, 8], 2) && to_indices(1:8, (r,))[1] isa Vector{Int}
+    @test to_indices(view(zeros(8), :), (r,))[1] isa DiskArrays.RangeIndex
+    @test checkbounds(Bool, zeros(8), r) && !checkbounds(Bool, zeros(7), r)
+    @test r[2:4] == DiskArrays.RangeIndex(2:2, 6:7) && r[2:4] isa DiskArrays.RangeIndex
+    @test r[3:3] == DiskArrays.RangeIndex(6:6) && isempty(r[2:1])
+    @test_throws BoundsError r[6]
+    @test_throws ArgumentError DiskArrays.RangeIndex(6:8, 1:2)
+    @test_throws ArgumentError DiskArrays.RangeIndex(1:3, 2:4)
+    @test_throws ArgumentError DiskArrays.RangeIndex(1:0, 2:4)
+    m = reshape(collect(1:64), 8, 8)
+    # Batched (density_threshold=1.0 batches any gap): ChunkRead joins ranges in the same chunk,
+    # SubRanges reads each range, adjacent ranges always join
+    for (chunksize, batchstrategy, reads) in (
+            ((8, 8), DiskArrays.ChunkRead(density_threshold=1.0), [1:8]),
+            ((4, 8), DiskArrays.ChunkRead(density_threshold=1.0), [1:2, 6:8]),
+            ((2, 1), DiskArrays.ChunkRead(density_threshold=1.0), [1:2, 6:8]),
+            ((8, 8), DiskArrays.SubRanges(density_threshold=1.0), [1:2, 6:8]))
+        a = AccessCountDiskArray(copy(m); chunksize, batchstrategy)
+        @test a[r, 2] == m[collect(r), 2]
+        @test getindex_log(a) == [(rd, 2:2) for rd in reads]
+        @test a[r, r[1:3]] == m[collect(r), collect(r[1:3])]
+        @test a[2:3, r] == m[2:3, collect(r)]
+        @test view(a, r, 1:2)[2:4, :] == m[[2, 6, 7], 1:2]
+        a[r, 3] = 1:5
+        @test setindex_log(a) == [(rd, 3:3) for rd in reads]
+        @test a[:, 3] == [1, 2, 19, 20, 21, 3, 4, 5]
+        empty!(getindex_log(a))
+        @test a[DiskArrays.RangeIndex(1:3, 4:5), 1] == m[1:5, 1] && getindex_log(a) == [(1:5, 1:1)]
+    end
+    # Dense enough for the default threshold, the hull is read in one block, as for a vector
+    for batchstrategy in (DiskArrays.ChunkRead(), DiskArrays.SubRanges(), DiskArrays.NoBatch())
+        a = AccessCountDiskArray(copy(m); chunksize=(2, 8), batchstrategy)
+        @test a[r, 2] == m[collect(r), 2] && getindex_log(a) == [(1:8, 2:2)]
+        @test DiskArrays.need_batch(a, (r, 2)) == DiskArrays.need_batch(a, (collect(r), 2))
+        s = DiskArrays.RangeIndex(1:1, 8:8)
+        @test DiskArrays.need_batch(a, (s, 2)) == DiskArrays.need_batch(a, (collect(s), 2))
+    end
+    # A range spanning chunks joins the next range in its last chunk
+    s = DiskArrays.RangeIndex(1:5, 7:8)
+    @test DiskArrays.group_ranges(s.ranges, DiskArrays.RegularChunks(4, 0, 8), DiskArrays.ChunkRead()) == [1:2]
+    @test DiskArrays.group_ranges(s.ranges, DiskArrays.RegularChunks(4, 0, 8), DiskArrays.SubRanges()) == [1:1, 2:2]
+    # 1-d
+    v = AccessCountDiskArray(collect(1:10); chunksize=(2,), batchstrategy=DiskArrays.ChunkRead(density_threshold=1.0))
+    @test v[r] == [1, 2, 6, 7, 8] && getindex_log(v) == [(1:2,), (6:8,)]
 end
