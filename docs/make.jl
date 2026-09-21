@@ -6,7 +6,7 @@ makedocs(;
     format=Documenter.HTML(; prettyurls=get(ENV, "CI", nothing) == "true"),
     authors="Fabian Gans",
     sitename="DiskArrays.jl",
-    pages=Any["index.md"],
+    pages=Any["index.md", "Backend System" => "backend.md"],
     # strict = true,
     # clean = true,
     # checkdocs = :exports,
