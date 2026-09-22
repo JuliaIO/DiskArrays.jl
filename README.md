@@ -196,7 +196,46 @@ the desired range.
 
 ## Arrays that do not implement eachchunk
 
-There are arrays that live on disk but which are not split into rectangular chunks, so that the `haschunks` trait returns `Unchunked()`. In order to still enable broadcasting and reductions for these arrays, a chunk size will be estimated in a way that a certain memory limit per chunk is not exceeded. This memory limit defaults to 100MB and can be modified by changing `DiskArrays.default_chunk_size[]`. Then a chunk size is computed based on the element size of the array. However, there are cases where the size of the element type is undefined, e.g. for Strings or variable-length vectors. In these cases one can overload the `DiskArrays.element_size` function for certain container types which returns an approximate element size (in bytes). Otherwise the size of an element will simply be assumed to equal the value stored in `DiskArrays.fallback_element_size` which defaults to 100 bytes. 
+There are arrays that live on disk but which are not split into rectangular chunks, so that the `haschunks` trait returns `Unchunked()`. In order to still enable broadcasting and reductions for these arrays, a chunk size will be estimated in a way that a certain memory limit per chunk is not exceeded. This memory limit defaults to 100MB and can be modified by changing `DiskArrays.default_chunk_size[]`. Then a chunk size is computed based on the element size of the array. However, there are cases where the size of the element type is undefined, e.g. for Strings or variable-length vectors. In these cases one can overload the `DiskArrays.element_size` function for certain container types which returns an approximate element size (in bytes). Otherwise the size of an element will simply be assumed to equal the value stored in `DiskArrays.fallback_element_size` which defaults to 100 bytes.
+
+
+## Compute backend
+
+Computations on `AbstractDiskArray` objects (e.g. `sum`, `mean`, `mapreduce`, `minimum`) use a
+backend dispatch mechanism. The default is a single-threaded chunked iterator; packages like
+DiskArrayEngine.jl provide threaded or distributed backends.
+
+### Selecting the global backend
+
+The backend active when DiskArrays loads is determined by the `"backend"` preference (defaults to
+`"default"`). It can be changed at any time during a session:
+
+```julia
+# Switch to DiskArrayEngine and save the preference (persists across sessions)
+DiskArrays.set_backend("DiskArrayEngine")
+
+# Or switch session-only, without saving a preference
+DiskArrays.set_dynamic_backend!(DiskArrays.DefaultBackend())
+```
+
+A Julia session restart is required for `set_backend` to take effect, as the preference is read
+during module loading. `set_dynamic_backend!` takes effect immediately.
+
+Valid backend names are `"default"` and `"DiskArrayEngine"`.
+
+### Per-array backend with `withbackend`
+
+`withbackend` wraps an array so that all computations use a specified backend, independent of the
+global setting:
+
+```julia
+# Use the DiskArrayEngine backend only for this array
+result = sum(withbackend(my_diskarray, DiskArrayEngineBackend()))
+```
+
+This is mainly useful for testing or for mixing arrays backed by different computation engines
+within the same expression. Note that `BroadcastStyle` uses the global backend — it only sees the
+array type, not the `withbackend` wrapper.
 
 
 [ci-img]: https://github.com/JuliaIO/DiskArrays.jl/workflows/CI/badge.svg

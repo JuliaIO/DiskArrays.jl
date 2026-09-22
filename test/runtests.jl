@@ -11,6 +11,8 @@ using TraceFuns, Suppressor
 # using JET
 # JET.report_package(DiskArrays)
 
+include("backend_tests.jl")
+
 @testset "Aqua.jl" begin
     Aqua.test_ambiguities([DiskArrays, Base, Core])
     Aqua.test_unbound_args(DiskArrays)
@@ -1136,7 +1138,6 @@ struct TestArray{T,N} <: AbstractArray{T,N} end
     DiskArrays.@implement_setindex TestArray
     DiskArrays.@implement_broadcast TestArray
     DiskArrays.@implement_iteration TestArray
-    DiskArrays.@implement_mapreduce TestArray
     DiskArrays.@implement_reshape TestArray
     DiskArrays.@implement_array_methods TestArray
     DiskArrays.@implement_permutedims TestArray

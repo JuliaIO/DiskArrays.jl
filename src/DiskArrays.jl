@@ -14,10 +14,11 @@ using Base: tail
     read(path, String)
 end DiskArrays
 
-export AbstractDiskArray, eachchunk, ChunkIndex, ChunkIndices, MissingTile
+export AbstractDiskArray, eachchunk, ChunkIndex, ChunkIndices, backend, withbackend,MissingTile
 
 include("scalar.jl")
 include("chunks.jl")
+include("compute.jl")
 include("diskarray.jl")
 include("batchgetindex.jl")
 include("diskindex.jl")
@@ -38,6 +39,7 @@ include("show.jl")
 include("chunktiledarray.jl")
 include("cached.jl")
 include("pad.jl")
+include("withbackend.jl")
 
 # The all-in-one macro
 
@@ -49,7 +51,6 @@ macro implement_diskarray(t)
         @implement_setindex $t
         @implement_broadcast $t
         @implement_iteration $t
-        @implement_mapreduce $t
         @implement_reshape $t
         @implement_array_methods $t
         @implement_permutedims $t
@@ -70,7 +71,6 @@ macro implement_diskarray_skip_zip(t)
         @implement_setindex $t
         @implement_broadcast $t
         @implement_iteration $t
-        @implement_mapreduce $t
         @implement_reshape $t
         @implement_array_methods $t
         @implement_permutedims $t
@@ -86,6 +86,10 @@ end
 
 # And we define the test types
 include("util/testtypes.jl")
+
+function __init__()
+    Base.Experimental.register_error_hint(_backend_error_hint, MethodError)
+end
 
 
 end # module
