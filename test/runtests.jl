@@ -7,6 +7,8 @@ using Aqua
 using ConstructionBase
 using TraceFuns, Suppressor
 
+include("chunkexists.jl")
+
 # Run with any code changes
 # using JET
 # JET.report_package(DiskArrays)
