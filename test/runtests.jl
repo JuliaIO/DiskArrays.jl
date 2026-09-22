@@ -906,6 +906,33 @@ end
     b4 = a[inds_unsorted_matrix]
     @test b4 == a_inner[inds_unsorted_matrix]
     @test sort(getindex_log(a)) == [(1:1,), (3:3,), (5:7,), (10:10,), (13:13,), (16:16,), (19:20,)]
+
+    # An unsorted vector whose sorted form is a single (step) range used to
+    # size the temporary buffer by the number of ranges (1) instead of the
+    # length of the longest range, giving a BoundsError in maybeshrink.
+    # Two elements hit it; three happened to work because the counts matched.
+    @testset "unsorted vector forming one range" begin
+        for (inds, log_step, log_nostep) in (([12, 5], [(5:7:12,)], [(5:5,), (12:12,)]),
+                                             ([5, 12], [(5:7:12,)], [(5:5,), (12:12,)]),
+                                             ([13, 5, 9], [(5:4:13,)], [(5:5,), (9:9,), (13:13,)]),
+                                             ([7, 6, 5], [(5:7,)], [(5:7,)]))
+            a = AccessCountDiskArray(a_inner, chunksize=(10,), batchstrategy=DiskArrays.SubRanges(CanStepRange(), 1.0))
+            @test a[inds] == a_inner[inds]
+            @test sort(getindex_log(a)) == log_step
+            a = AccessCountDiskArray(a_inner, chunksize=(10,), batchstrategy=DiskArrays.SubRanges(NoStepRange(), 0.5))
+            @test a[inds] == a_inner[inds]
+            @test sort(getindex_log(a)) == log_nostep
+            a = AccessCountDiskArray(a_inner, chunksize=(10,), batchstrategy=DiskArrays.ChunkRead(CanStepRange(), 1.0))
+            @test a[inds] == a_inner[inds]
+        end
+        # the same along the first axis of a 3D array, as NCDatasets exposes
+        # NetCDF variables (they advertise strided reads)
+        a3 = reshape(Float32.(1:16*11*7), 16, 11, 7)
+        d3 = AccessCountDiskArray(a3, chunksize=(8, 8, 8), batchstrategy=DiskArrays.SubRanges(CanStepRange(), 1.0))
+        @test d3[[12, 5], 1:11, :] == a3[[12, 5], 1:11, :]
+        @test d3[[12, 5], :, [7, 1]] == a3[[12, 5], :, [7, 1]]
+        @test d3[reshape([12, 5, 5, 12], 2, 2), 3, :] == a3[reshape([12, 5, 5, 12], 2, 2), 3, :]
+    end
 end
 
 @testset "generator" begin
