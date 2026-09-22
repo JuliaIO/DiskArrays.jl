@@ -1,26 +1,3 @@
-struct ChunkExistenceArray{N} <: AbstractDiskArray{Int,N}
-    stored::Set{NTuple{N,Int}}
-    queries::Vector{NTuple{N,Int}}
-end
-Base.size(::ChunkExistenceArray{N}) where {N} = ntuple(_ -> 4, N)
-DiskArrays.eachchunk(a::ChunkExistenceArray{N}) where {N} =
-    DiskArrays.GridChunks(a, ntuple(_ -> 2, N))
-function DiskArrays.chunkexists(a::ChunkExistenceArray, idxs::Integer...)
-    push!(a.queries, idxs)
-    return idxs in a.stored
-end
-
-struct BatchChunkExistenceArray{N} <: AbstractDiskArray{Int,N}
-    parent::ChunkExistenceArray{N}
-    queries::Vector{Vector{NTuple{N,Int}}}
-end
-DiskArrays.chunkexists(a::BatchChunkExistenceArray, idxs::Integer...) =
-    chunkexists(a.parent, idxs...)
-function DiskArrays.chunkexists(a::BatchChunkExistenceArray, indices::AbstractVector{<:Tuple})
-    push!(a.queries, collect(indices))
-    return [i in a.parent.stored for i in indices]
-end
-
 @testset "chunkexists" begin
     @testset "default" begin
         a = AccessCountDiskArray(zeros(4, 4); chunksize=(2, 2))
@@ -37,39 +14,40 @@ end
         @test chunkexists(fill(0), [()]) == [true]
     end
 
-    @testset "scalar override and batch fallback" begin
-        a = ChunkExistenceArray(Set([(1, 1), (2, 2)]), NTuple{2,Int}[])
+    @testset "ConcatDiskArray with missing tiles" begin
+        # Tiles are 4x4 with 2x2 chunks, so the concat array has a 4x4 chunk grid
+        # and every chunk maps to a single tile.
+        tile() = AccessCountDiskArray(zeros(4, 4); chunksize=(2, 2))
+        missingtile = DiskArrays.MissingTile(0.0)
+        tiles = reshape([tile(), missingtile, missingtile, tile()], 2, 2)
+        a = DiskArrays.ConcatDiskArray(tiles)
+        @test size(eachchunk(a)) == (4, 4)
         @test chunkexists(a, 1, 1)
-        @test !chunkexists(a, (1, 2))
-        @test !chunkexists(a, CartesianIndex(2, 1))
-        @test chunkexists(a, ChunkIndex(2, 2))
-        indices = [(2, 2), (1, 2), (2, 2)]
-        empty!(a.queries)
+        @test chunkexists(a, 2, 2)
+        @test !chunkexists(a, (1, 3))
+        @test !chunkexists(a, CartesianIndex(3, 1))
+        @test chunkexists(a, ChunkIndex(4, 4))
+        @test chunkexists(a, ChunkIndex(1, 3; offset=true)) == false
+        indices = [(4, 4), (1, 4), (4, 4)]
         @test chunkexists(a, indices) == [true, false, true]
-        @test a.queries == indices
-        empty!(a.queries)
-        @test chunkexists(a, (i for i in indices if i[1] == 2)) == [true, true]
-        @test a.queries == [(2, 2), (2, 2)]
-        empty!(a.queries)
+        @test chunkexists(a, (i for i in indices if i[1] == 4)) == [true, true]
         @test chunkexists(a, NTuple{2,Int}[]) == Bool[]
         @test eltype(chunkexists(a, (i for i in indices if false))) == Bool
-        @test isempty(a.queries)
         @test chunkexists(a, Tuple(indices)) == [true, false, true]
-        @test chunkexists(a, CartesianIndices((2, 2))) == [true false; false true]
-        @test chunkexists(a, ChunkIndices(a)) == [true false; false true]
-        @test chunkexists(a, ChunkIndex(1, 2; offset=true)) == false
-        v = ChunkExistenceArray(Set([(2,)]), NTuple{1,Int}[])
-        @test chunkexists(v, [1, 2]) == [false, true]
-    end
+        expected = [i <= 2 && j <= 2 || i > 2 && j > 2 for i in 1:4, j in 1:4]
+        @test chunkexists(a, CartesianIndices((4, 4))) == expected
+        @test chunkexists(a, ChunkIndices(a)) == expected
+        @test all(getindex_count(t) == 0 for t in tiles if t isa AccessCountDiskArray)
 
-    @testset "batch override" begin
-        parent = ChunkExistenceArray(Set([(1, 1)]), NTuple{2,Int}[])
-        a = BatchChunkExistenceArray(parent, Vector{NTuple{2,Int}}[])
-        indices = [(1, 1), (1, 2), (1, 1)]
-        @test chunkexists(a, indices) == [true, false, true]
-        @test a.queries == [indices]
-        @test isempty(parent.queries)
-        @test chunkexists(a, 1, 1)
-        @test parent.queries == [(1, 1)]
+        # Stacking along a new dimension: the chunk index in the new dimension selects the tile
+        v = DiskArrays.ConcatDiskArray(reshape([tile(), missingtile, tile()], 1, 1, 3))
+        @test size(eachchunk(v)) == (2, 2, 3)
+        @test chunkexists(v, [(1, 1, 1), (2, 2, 2), (1, 2, 3)]) == [true, false, true]
+        @test chunkexists(v, ChunkIndices(v)) == cat(trues(2, 2), falses(2, 2), trues(2, 2); dims=3)
+
+        # Queries are forwarded to the tiles' own chunkexists
+        nested = DiskArrays.ConcatDiskArray(reshape([a, missingtile, missingtile, a], 2, 2))
+        @test size(eachchunk(nested)) == (8, 8)
+        @test chunkexists(nested, ChunkIndices(nested)) == [expected falses(4, 4); falses(4, 4) expected]
     end
 end
