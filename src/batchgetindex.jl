@@ -44,6 +44,12 @@ NoBatch(from::BatchStrategy) =
 
 A chunking strategy that splits contiguous streaks 
 into ranges to be read separately.
+
+A vector of indices is sorted, split into runs of consecutive indices (or,
+with `CanStepRange()`, runs with a constant step) that are each read as one
+range, and reassembled in the requested order, so the vector need not be
+sorted or unique. For example `[12, 5]` reads the single range `5:7:12` with
+`CanStepRange()` and the ranges `5:5` and `12:12` with `NoStepRange()`.
 """
 @kwdef struct SubRanges{S} <: BatchStrategy{S}
     allow_steprange::S = NoStepRange()
@@ -237,7 +243,7 @@ function process_index(i::AbstractArray{<:Integer,N}, chunks::Tuple{Vararg{Chunk
         outinds = map(outputinds) do oi
             (view(p, oi),)
         end
-        tempsize = maximum(length(rangelist))
+        tempsize = maximum(length, rangelist)
         DiskIndex(size(i), (tempsize,), (outinds,), (tempinds,), (datainds,))
     end
     return di, Base.tail(chunks)
