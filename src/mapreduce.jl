@@ -60,16 +60,40 @@ for fname in [:sum, :prod, :all, :any, :minimum, :maximum]
     end
 end
 
-Base.count(v::AbstractDiskArray) = count(identity, v::AbstractDiskArray)
-function Base.count(f, v::AbstractDiskArray)
+Base.count(v::AbstractDiskArray) = count(should_use_threading(v), identity, v::AbstractDiskArray)
+Base.count(f, v::AbstractDiskArray) = count(should_use_threading(v), f, v::AbstractDiskArray)
+
+function Base.count(::Type{SingleThreaded}, f, v::AbstractDiskArray)
     sum(eachchunk(v)) do chunk
         count(f, v[chunk...])
     end
 end
 
-Base.unique(v::AbstractDiskArray) = unique(identity, v)
-function Base.unique(f, v::AbstractDiskArray)
+function Base.count(::Type{MultiThreaded}, f, v::AbstractDiskArray)
+    chunks = eachchunk(v)
+    u = Vector{Int}(undef, length(chunks))
+    Threads.@threads for i in 1:length(chunks)
+        u[i] = count(f, v[chunks[i]...])
+    end
+    sum(u)
+end
+
+Base.unique(v::AbstractDiskArray) = unique(should_use_threading(v), identity, v)
+Base.unique(f, v::AbstractDiskArray) = unique(should_use_threading(v), f, v)
+
+function Base.unique(::Type{SingleThreaded}, f, v::AbstractDiskArray)
     reduce((unique(f, v[c...]) for c in eachchunk(v))) do acc, u
         unique!(f, append!(acc, u))
+    end
+end
+
+function Base.unique(::Type{MultiThreaded}, f, v::AbstractDiskArray)
+    chunks = eachchunk(v)
+    u = Vector{Vector{eltype(v)}}(undef, length(chunks))
+    Threads.@threads for i in 1:length(chunks)
+        u[i] = unique(f, v[chunks[i]...])
+    end
+    reduce(u) do acc, t
+        unique!(f, append!(acc, t))
     end
 end
