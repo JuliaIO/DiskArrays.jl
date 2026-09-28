@@ -55,6 +55,14 @@ define
 DiskArrays.haschunks(A::CustomDiskArray) = DiskArrays.Unchunked()
 ````
 
+Backends with optional chunk storage can implement
+`DiskArrays.chunkexists(A::CustomDiskArray, chunkidxs::Integer...)` to report
+whether a chunk is stored. Coordinates are one-based indices into `eachchunk(A)`;
+the default returns `true`. An absent chunk may still read as fill values.
+`chunkexists(A, [(1, 1), (2, 1)])` checks several chunks, calling the scalar method
+for each coordinate by default. Backends can specialize the iterable form to
+batch storage queries.
+
 Implementing only these methods makes all kinds of strange indexing patterns work (Colons, StepRanges, Integer vectors,
 Boolean masks, CartesianIndices, Arrays of CartesianIndex, and mixtures of all these) while making sure that as few
 `readblock!` or `writeblock!` calls as possible are performed by reading a rectangular bounding box of the required

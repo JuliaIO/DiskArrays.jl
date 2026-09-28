@@ -128,6 +128,20 @@ end
 eachchunk(a::ConcatDiskArray) = a.chunks
 haschunks(c::ConcatDiskArray) = c.haschunks
 
+# A chunk of the concatenated array lies within a single tile, so locate the tile
+# from the chunk's first element and forward the query to the parent's own chunk.
+function chunkexists(a::ConcatDiskArray, chunkidxs::Integer...)
+    chunkrange = eachchunk(a)[chunkidxs...]
+    tileidx = map((r, si) -> searchsortedlast(si, first(r)), chunkrange, a.startinds)
+    parent = a.parents[tileidx...]
+    parent isa MissingTile && return false
+    parentchunks = eachchunk(parent).chunks
+    parentidx = ntuple(ninnerdims(a)) do d
+        findchunk(parentchunks[d], first(chunkrange[d]) - a.startinds[d][tileidx[d]] + 1)
+    end
+    return chunkexists(parent, parentidx...)
+end
+
 function readblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     # Find affected blocks and indices in blocks
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I

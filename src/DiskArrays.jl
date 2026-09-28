@@ -14,7 +14,7 @@ using Base: tail
     read(path, String)
 end DiskArrays
 
-export AbstractDiskArray, eachchunk, ChunkIndex, ChunkIndices, backend, withbackend,MissingTile
+export AbstractDiskArray, eachchunk, chunkexists, ChunkIndex, ChunkIndices, backend, withbackend,MissingTile
 
 include("scalar.jl")
 include("chunks.jl")

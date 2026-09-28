@@ -51,6 +51,34 @@ function eachchunk end
 eachchunk(a::AbstractArray) = estimate_chunksize(a)
 
 """
+    chunkexists(a, chunkidxs::Integer...) -> Bool
+    chunkexists(a, chunkidxs::Tuple{Vararg{Integer}}) -> Bool
+    chunkexists(a, chunkidx::Union{CartesianIndex,ChunkIndex}) -> Bool
+    chunkexists(a, indices) -> AbstractArray{Bool}
+
+Return whether a chunk is stored. Chunk coordinates are one-based indices into
+[`eachchunk(a)`](@ref eachchunk), with one coordinate per array dimension.
+Callers must supply valid chunk coordinates; the fallback assumes every chunk
+exists and returns `true` without checking bounds or reading data.
+
+Backends with optional chunk storage can specialize
+`chunkexists(a::CustomDiskArray, chunkidxs::Integer...)`. A stored chunk containing
+only fill values still exists; an absent chunk may read as fill values.
+
+An iterable of coordinates queries multiple chunks, returning a Boolean array
+in iteration order and preserving the shape of array inputs. Each coordinate
+may be an integer tuple, `CartesianIndex`, or [`ChunkIndex`](@ref).
+The fallback calls scalar `chunkexists` for each coordinate. Backends can
+specialize the iterable form, for example with `indices::AbstractVector{<:Tuple}`,
+to batch storage queries.
+"""
+chunkexists(a, chunkidxs::Integer...) = true
+chunkexists(a, chunkidxs::Tuple{Vararg{Integer}}) = chunkexists(a, chunkidxs...)
+chunkexists(a, chunkidx::CartesianIndex) = chunkexists(a, Tuple(chunkidx)...)
+chunkexists(a, chunkidx::ChunkIndex) = chunkexists(a, chunkidx.I)
+chunkexists(a, indices) = Bool[chunkexists(a, i) for i in indices]
+
+"""
     haschunks(a)
 
 Returns a trait for the chunk pattern of a dis array, 
