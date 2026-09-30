@@ -10,28 +10,36 @@ abstract type AbstractPermutedDiskArray{T,N,perm,iperm,A} <: AbstractDiskArray{T
 
 A lazily permuted disk array returned by `permutedims(diskarray, permutation)`.
 """
-struct PermutedDiskArray{T,N,perm,iperm,A<:AbstractArray{T,N}} <: AbstractPermutedDiskArray{T,N,perm,iperm,A}
+struct PermutedDiskArray{T,N,perm,iperm,A<:AbstractArray{T,N}} <:
+       AbstractPermutedDiskArray{T,N,perm,iperm,A}
     parent::A
 end
 # We use PermutedDimsArray internals instead of duplicating them,
 # and just copy the type parameters it calculates.
-PermutedDiskArray(A::AbstractArray, perm::Union{Tuple,AbstractVector}) =
-    PermutedDiskArray(A, PermutedDimsArray(CartesianIndices(A), perm))
+function PermutedDiskArray(A::AbstractArray, perm::Union{Tuple,AbstractVector})
+    return PermutedDiskArray(A, PermutedDimsArray(CartesianIndices(A), perm))
+end
 function PermutedDiskArray(
     a::A, ::PermutedDimsArray{<:Any,<:Any,perm,iperm}
 ) where {A<:AbstractArray{T,N},perm,iperm} where {T,N}
-    PermutedDiskArray{T,N,perm,iperm,A}(a)
+    return PermutedDiskArray{T,N,perm,iperm,A}(a)
 end
 
 # We need explicit ConstructionBase support as perm and iperm are only in the type.
 # We include N so that only arrays of the same dimensionality can be set with this perm and iperm
 struct PermutedDiskArrayConstructor{N,perm,iperm} end
 
-(::PermutedDiskArrayConstructor{N,perm,iperm})(a::A) where A<:AbstractArray{T,N} where {T,N,perm,iperm} = 
-    PermutedDiskArray{T,N,perm,iperm,A}(a)
+function (::PermutedDiskArrayConstructor{N,perm,iperm})(
+    a::A
+) where {A<:AbstractArray{T,N}} where {T,N,perm,iperm}
+    return PermutedDiskArray{T,N,perm,iperm,A}(a)
+end
 
-ConstructionBase.constructorof(::Type{<:PermutedDiskArray{<:Any,N,perm,iperm}}) where {N,perm,iperm} = 
-    PermutedDiskArrayConstructor{N,perm,iperm}()
+function ConstructionBase.constructorof(
+    ::Type{<:PermutedDiskArray{<:Any,N,perm,iperm}}
+) where {N,perm,iperm}
+    return PermutedDiskArrayConstructor{N,perm,iperm}()
+end
 
 # Base methods
 

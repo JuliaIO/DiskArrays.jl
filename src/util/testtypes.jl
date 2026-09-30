@@ -2,8 +2,14 @@ module TestTypes
 
 import ..DiskArrays
 
-export AccessCountDiskArray, ChunkedDiskArray, UnchunkedDiskArray, getindex_count, setindex_count, trueparent,
-    getindex_log, setindex_log
+export AccessCountDiskArray,
+    ChunkedDiskArray,
+    UnchunkedDiskArray,
+    getindex_count,
+    setindex_count,
+    trueparent,
+    getindex_log,
+    setindex_log
 
 """
     AccessCountDiskArray(A; chunksize)
@@ -14,7 +20,8 @@ and optimise chunk access.
 `getindex_count(A)` and `setindex_count(A)` can be used to check the
 the counters.
 """
-struct AccessCountDiskArray{T,N,A<:AbstractArray{T,N},RS} <: DiskArrays.AbstractDiskArray{T,N}
+struct AccessCountDiskArray{T,N,A<:AbstractArray{T,N},RS} <:
+       DiskArrays.AbstractDiskArray{T,N}
     getindex_log::Vector{Any}
     setindex_log::Vector{Any}
     parent::A
@@ -22,8 +29,11 @@ struct AccessCountDiskArray{T,N,A<:AbstractArray{T,N},RS} <: DiskArrays.Abstract
     batchstrategy::RS
 end
 DiskArrays.batchstrategy(a::AccessCountDiskArray) = a.batchstrategy
-AccessCountDiskArray(a; chunksize=size(a), batchstrategy=DiskArrays.ChunkRead(DiskArrays.NoStepRange(), 0.5)) =
-    AccessCountDiskArray([], [], a, chunksize, batchstrategy)
+function AccessCountDiskArray(
+    a; chunksize=size(a), batchstrategy=DiskArrays.ChunkRead(DiskArrays.NoStepRange(), 0.5)
+)
+    return AccessCountDiskArray([], [], a, chunksize, batchstrategy)
+end
 
 Base.parent(a::AccessCountDiskArray) = a.parent
 Base.size(a::AccessCountDiskArray) = size(parent(a))
@@ -35,7 +45,9 @@ DiskArrays.eachchunk(a::AccessCountDiskArray) = DiskArrays.GridChunks(a, a.chunk
 function DiskArrays.readblock!(a::AccessCountDiskArray, aout, i::OrdinalRange...)
     ndims(a) == length(i) || error("Number of indices is not correct")
     foreach(i) do r
-        isa(r, AbstractUnitRange) || DiskArrays.allow_steprange(a) || error("StepRange passed although trait is false")
+        return isa(r, AbstractUnitRange) ||
+               DiskArrays.allow_steprange(a) ||
+               error("StepRange passed although trait is false")
     end
     # println("reading from indices ", join(string.(i)," "))
     push!(a.getindex_log, i)
@@ -44,7 +56,9 @@ end
 function DiskArrays.writeblock!(a::AccessCountDiskArray, v, i::OrdinalRange...)
     ndims(a) == length(i) || error("Number of indices is not correct")
     foreach(i) do r
-        isa(r, AbstractUnitRange) || DiskArrays.allow_steprange(a) || error("StepRange passed although trait is false")
+        return isa(r, AbstractUnitRange) ||
+               DiskArrays.allow_steprange(a) ||
+               error("StepRange passed although trait is false")
     end
     # println("Writing to indices ", join(string.(i)," "))
     push!(a.setindex_log, i)
@@ -61,7 +75,7 @@ getindex_count(a::DiskArrays.AbstractDiskArray) = getindex_count(parent(a))
 setindex_count(a::DiskArrays.AbstractDiskArray) = setindex_count(parent(a))
 getindex_log(a::DiskArrays.AbstractDiskArray) = getindex_log(parent(a))
 setindex_log(a::DiskArrays.AbstractDiskArray) = setindex_log(parent(a))
-function trueparent(a::DiskArrays.AbstractDiskArray) 
+function trueparent(a::DiskArrays.AbstractDiskArray)
     if parent(a) === a
         a
     else
@@ -69,8 +83,9 @@ function trueparent(a::DiskArrays.AbstractDiskArray)
     end
 end
 
-trueparent(a::DiskArrays.PermutedDiskArray{T,N,perm,iperm}) where {T,N,perm,iperm} =
-    permutedims(trueparent(parent(a)), perm)
+function trueparent(a::DiskArrays.PermutedDiskArray{T,N,perm,iperm}) where {T,N,perm,iperm}
+    return permutedims(trueparent(parent(a)), perm)
+end
 
 """
     ChunkedDiskArray(A; chunksize)
@@ -88,8 +103,12 @@ Base.size(a::ChunkedDiskArray) = size(parent(a))
 
 DiskArrays.haschunks(::ChunkedDiskArray) = DiskArrays.Chunked()
 DiskArrays.eachchunk(a::ChunkedDiskArray) = DiskArrays.GridChunks(a, a.chunksize)
-DiskArrays.readblock!(a::ChunkedDiskArray, aout, i::AbstractUnitRange...) = aout .= parent(a)[i...]
-DiskArrays.writeblock!(a::ChunkedDiskArray, v, i::AbstractUnitRange...) = view(parent(a), i...) .= v
+function DiskArrays.readblock!(a::ChunkedDiskArray, aout, i::AbstractUnitRange...)
+    return aout .= parent(a)[i...]
+end
+function DiskArrays.writeblock!(a::ChunkedDiskArray, v, i::AbstractUnitRange...)
+    return view(parent(a), i...) .= v
+end
 
 """
     UnchunkedDiskArray(A)

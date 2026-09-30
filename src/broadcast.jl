@@ -15,7 +15,9 @@ end
 struct BroadcastDiskArray{T,N,BC<:Broadcasted{<:ChunkStyle{N}}} <: AbstractDiskArray{T,N}
     broadcasted::BC
 end
-function BroadcastDiskArray(broadcasted::B) where {B<:Broadcasted{<:ChunkStyle{N}}} where {N}
+function BroadcastDiskArray(
+    broadcasted::B
+) where {B<:Broadcasted{<:ChunkStyle{N}}} where {N}
     ElType = Base.Broadcast.combine_eltypes(broadcasted.f, broadcasted.args)
     return BroadcastDiskArray{ElType,N,B}(broadcasted)
 end
@@ -26,10 +28,13 @@ Base.size(a::BroadcastDiskArray) = size(a.broadcasted)
 Base.broadcastable(a::BroadcastDiskArray) = a.broadcasted
 Base.copy(a::BroadcastDiskArray) = copyto!(zeros(eltype(a), size(a)), a.broadcasted)
 
-Base.copy(broadcasted::Broadcasted{ChunkStyle{N}}) where {N} =
-    BroadcastDiskArray(flatten(broadcasted))
+function Base.copy(broadcasted::Broadcasted{ChunkStyle{N}}) where {N}
+    return BroadcastDiskArray(flatten(broadcasted))
+end
 @inline Base.copy(broadcasted::Broadcasted{ChunkStyle{0}}) = broadcasted[CartesianIndex()]
-function Base.copyto!(dest::AbstractArray, broadcasted::Broadcasted{ChunkStyle{N}}) where {N}
+function Base.copyto!(
+    dest::AbstractArray, broadcasted::Broadcasted{ChunkStyle{N}}
+) where {N}
     bcf = flatten(broadcasted)
     # Get a list of chunks to apply
     gcd = common_chunks(size(bcf), dest, bcf.args...)
@@ -38,13 +43,13 @@ function Base.copyto!(dest::AbstractArray, broadcasted::Broadcasted{ChunkStyle{N
         # Possible optimization would be to use a LRU cache here, so that data has not
         # to be read twice in case of repeating indices
         argssub = map(arg -> subsetarg(arg, chunk), bcf.args)
-        view(dest, chunk...) .= bcf.f.(argssub...)
+        return view(dest, chunk...) .= bcf.f.(argssub...)
     end
     return dest
 end
 
 function Base.similar(::Broadcasted{ChunkStyle{0}}, ::Type{ElType}, dims) where {ElType}
-    return similar(Array{ElType, length(dims)}, dims)
+    return similar(Array{ElType,length(dims)}, dims)
 end
 function Base.similar(::Broadcasted{ChunkStyle{0}}, ::Type{Bool}, dims)
     return similar(BitArray, dims)
@@ -53,8 +58,7 @@ end
 # DiskArrays interface
 
 haschunks(a::BroadcastDiskArray) = Chunked()
-eachchunk(a::BroadcastDiskArray) = 
-    common_chunks(size(a.broadcasted), a.broadcasted.args...)
+eachchunk(a::BroadcastDiskArray) = common_chunks(size(a.broadcasted), a.broadcasted.args...)
 function readblock!(a::BroadcastDiskArray, aout, i::OrdinalRange...)
     argssub = map(arg -> subsetarg(arg, i), a.broadcasted.args)
     return aout .= a.broadcasted.f.(argssub...)
@@ -65,7 +69,7 @@ end
 function common_chunks(s, args...)
     N = length(s)
     chunkedarrays = reduce(args; init=()) do acc, x
-        haschunks(x) isa Chunked ? (acc..., x) : acc
+        return haschunks(x) isa Chunked ? (acc..., x) : acc
     end
     all(ar -> isa(eachchunk(ar), GridChunks), chunkedarrays) ||
         error("Currently only chunks of type GridChunks can be merged by broadcast")
@@ -82,10 +86,11 @@ function common_chunks(s, args...)
         allchunks = collect(map(eachchunk, chunkedarrays))
         tt = ntuple(N) do n
             csnow = filter(allchunks) do cs
-                ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
+                return ndims(cs) >= n &&
+                       first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
             end
             isempty(csnow) && return RegularChunks(1, 0, s[n])
-            
+
             cs = first(csnow).chunks[n]
             if all(s -> s.chunks[n] == cs, csnow)
                 return cs
@@ -107,14 +112,14 @@ function merge_chunks(csnow, n)
     while true
         # Get the largest chunk end point
         currentchunks = map(chpos, csnow) do i, ch
-            ch.chunks[n][i]
+            return ch.chunks[n][i]
         end
         chend = maximum(last.(currentchunks))
         # Find the position where the end of a chunk matches the new chunk endpoint
         newchpos = map(chpos, csnow) do i, ch
             found = findnext(x -> last(x) == chend, ch.chunks[n], i)
             found === nothing && error("Chunks do not align in dimension $n")
-            found
+            return found
         end
         # If we can't find this end point for all chunk lists, error
         firstcs = csnow[1].chunks[n]
@@ -133,8 +138,7 @@ end
 
 subsetarg(arg, ranges) = arg
 # Maybe making a copy here would be faster, need to check...
-subsetarg(arg::AbstractArray, ranges) = 
-    view(arg, maybeonerange(size(arg), ranges)...) 
+subsetarg(arg::AbstractArray, ranges) = view(arg, maybeonerange(size(arg), ranges)...)
 
 maybeonerange(sizes, ranges) = maybeonerange((), sizes, ranges)
 function maybeonerange(out, sizes, ranges)
