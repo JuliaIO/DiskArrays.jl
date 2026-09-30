@@ -1,6 +1,6 @@
 module DiskArrays
 
-import ConstructionBase
+using ConstructionBase: ConstructionBase
 import Base.PermutedDimsArrays: genperm
 
 using LRUCache: LRUCache, LRU
@@ -86,6 +86,5 @@ end
 
 # And we define the test types
 include("util/testtypes.jl")
-
 
 end # module
