@@ -17,7 +17,7 @@ Mmap = "1"
 OffsetArrays = "1"
 Statistics = "1.9"
 Suppressor = "0.2.8"
-Test = "1.9"
+Test = "<0.0.1, 1.9"
 TraceFuns = "0.2.0"
 julia = "1.9"
 
