@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased]
 
+### Changed
+
+- Iteration yields values in the column-major order of Base arrays, so `zip`, generators, `enumerate`,
+  `Iterators.take`/`drop`, `foldl` and `accumulate` pair values with the right indices. Values are read in blocks of
+  whole chunks that fit in `default_chunk_size`; each chunk is read once when a block can span the last dimension.
+- `zip` with a disk array accepts any iterator.
+
+### Removed
+
+- `DiskZip`, `DiskGenerator`, `BlockedIndices`, the `@implement_zip`, `@implement_generator` and
+  `@implement_diskarray_skip_zip` macros, and their `Base.zip`, `Base.Generator` and `Base.eachindex`
+  methods, which invalidated much compiled code ([#175](https://github.com/JuliaIO/DiskArrays.jl/issues/175)).
+
 - Initial release
 
 <!-- Links -->
