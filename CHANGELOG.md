@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased]
 
+- `estimate_chunksize`, and so `eachchunk` of an in-memory array or view, no longer allocates
+
 - Initial release
 
 <!-- Links -->

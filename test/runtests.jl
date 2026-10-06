@@ -1097,6 +1097,17 @@ end
     @test DiskArrays.eachchunk(b) == DiskArrays.GridChunks(b, (200, 5))
     @test DiskArrays.estimate_chunksize(c) == DiskArrays.GridChunks(c, (200, 625))
     @test DiskArrays.eachchunk(c) == DiskArrays.GridChunks(c, (200, 625))
+    # three dimensions, the limit falling inside the middle one, and no allocations
+    DiskArrays.default_chunk_size[] = 1
+    DiskArrays.fallback_element_size[] = 100
+    @test DiskArrays.estimate_chunksize((200, 1000, 7), 8) == DiskArrays.GridChunks((200, 1000, 7), (200, 625, 1))
+    @test DiskArrays.estimate_chunksize((3, 20, 5), 8) == DiskArrays.GridChunks((3, 20, 5), (3, 20, 5))
+    DiskArrays.estimate_chunksize((3, 20, 5), 8)
+    @test (@allocated DiskArrays.estimate_chunksize((3, 20, 5), 8)) == 0
+    v = view(zeros(10, 20, 5), 1:3, :, :)
+    DiskArrays.eachchunk(v)
+    @test (@allocated DiskArrays.eachchunk(v)) == 0
+    DiskArrays.fallback_element_size[] = 1000   # as the testset left it before these additions
 end
 
 @testset "Mixed size chunks" begin
