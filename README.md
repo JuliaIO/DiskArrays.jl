@@ -19,8 +19,9 @@ Currently supported features are:
   - a fallback `Base.show` method that does not call getindex repeatedly
   - implementations for `mapreduce` and `mapreducedim`, that respect the chunking of the underlying
   dataset. This greatly increases performance of higher-level reductions like `sum(a,dims=d)`
-  - an iterator over the values of a DiskArray that caches a chunk of data and returns the values
-  within. This allows efficient usage of e.g. `using DataStructures; counter(a)`
+  - an iterator over the values of a DiskArray, in the column-major order of Base arrays, that reads
+  the data in blocks of whole chunks. This allows efficient usage of e.g. `zip`, generators or
+  `using DataStructures; counter(a)`
   - customization of `broadcast` when there is a `DiskArray` on the LHS. This at least makes things
   like `a.=5` possible and relatively fast
 
