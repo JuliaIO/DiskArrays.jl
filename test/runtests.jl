@@ -231,6 +231,7 @@ end
     @test a1[3] == 9:10
     @test length(a1) == 3
     @test size(a1) == (3,)
+    @test size(a1, 2) == 1
     @test subsetchunks(a1, 1:10) === a1
     @test subsetchunks(a1, 4:9) === RegularChunks(5, 0, 6)
     @test subsetchunks(a1, Int[]) === RegularChunks(1, 0, 0)

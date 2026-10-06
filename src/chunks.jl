@@ -78,8 +78,7 @@ Base.@propagate_inbounds function Base.getindex(r::RegularChunks, i::Int)
     @boundscheck checkbounds(r, i)
     return max((i - 1) * r.chunksize + 1 - r.offset, 1):min(i * r.chunksize - r.offset, r.arraysize)
 end
-Base.size(r::RegularChunks, _) = div(r.arraysize + r.offset - 1, r.chunksize) + 1
-Base.size(r::RegularChunks) = (size(r, 1),)
+Base.size(r::RegularChunks) = (div(r.arraysize + r.offset - 1, r.chunksize) + 1,)
 function Base.:(==)(r1::RegularChunks, r2::RegularChunks)
     # The axis sizes must always match
     r1.arraysize == r2.arraysize || return false
