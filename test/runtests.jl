@@ -1004,6 +1004,13 @@ end
             @test x[7] == a_vec[4]
             @test getindex_count(a_disk) == 1
         end
+        # A different element type takes the method for any `PermutedDimsArray`
+        for T in (Int, Float64)
+            local x = PermutedDimsArray(zeros(T, 9, 10), (2, 1))
+            @test copyto!(x, a_disk) === x
+            @test x == a
+            @test parent(x) == permutedims(a)
+        end
     end
 
     @test collect(reverse(a_disk)) == reverse(a)

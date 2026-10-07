@@ -85,7 +85,7 @@ macro implement_array_methods(t)
             return $_disk_copyto!(dest, Rdest, src, Rsrc)
         end
         # For ambiguity
-        Base.copyto!(dest::PermutedDimsArray, src::$t) = DiskArrays._copyto!(dest, src)
+        Base.copyto!(dest::PermutedDimsArray, src::$t) = $_disk_copyto!(dest, src)
         function Base.copyto!(dest::PermutedDimsArray{T,N}, src::$t{T,N}) where {T,N}
             return $_disk_copyto!(dest, src)
         end
