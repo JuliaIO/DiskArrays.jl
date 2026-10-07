@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased]
 
+- `element_size` also accepts an element type, `element_size(T::Type)`, so callers can
+  size buffers before an array exists; `element_size(a::AbstractArray)` now forwards to it
+
 - Initial release
 
 <!-- Links -->

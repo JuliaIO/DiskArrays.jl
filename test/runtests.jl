@@ -1099,6 +1099,24 @@ end
     @test DiskArrays.eachchunk(c) == DiskArrays.GridChunks(c, (200, 625))
 end
 
+@testset "element_size" begin
+    old = DiskArrays.fallback_element_size[]
+    DiskArrays.fallback_element_size[] = 100
+    @test DiskArrays.element_size(Float64) == 8
+    @test DiskArrays.element_size(Int32) == 4
+    @test DiskArrays.element_size(Union{Missing,Float32}) == 4
+    @test DiskArrays.element_size(String) == 100
+    @test DiskArrays.element_size(Union{Missing,String}) == 100
+    @test DiskArrays.element_size(Any) == 100
+    @test DiskArrays.element_size(zeros(Int16, 3, 3)) == 2
+    @test DiskArrays.element_size(Union{Missing,Int16}[1, missing]) == 2
+    @test DiskArrays.element_size(["a", "bb"]) == 100
+    DiskArrays.fallback_element_size[] = 7
+    @test DiskArrays.element_size(String) == 7
+    @test DiskArrays.element_size(["a", "bb"]) == 7
+    DiskArrays.fallback_element_size[] = old
+end
+
 @testset "Mixed size chunks" begin
     a1 = AccessCountDiskArray(zeros(24, 16); chunksize=(1, 1))
     a2 = AccessCountDiskArray((2:25) * vec(1:16)'; chunksize=(1, 2))
