@@ -441,18 +441,21 @@ end
 Estimate a suitable chunk pattern for an `AbstractArray` without chunks.
 """
 estimate_chunksize(a::AbstractArray) = estimate_chunksize(size(a), element_size(a))
-function estimate_chunksize(size, elsize)
-    ii = searchsortedfirst(cumprod(collect(size)), default_chunk_size[] * 1e6 / elsize)
-    chunksize = ntuple(length(size)) do idim
+function estimate_chunksize(size::Tuple, elsize)
+    # all tuple arithmetic with the dimension count known at compile time, so this
+    # allocates nothing; it is called for every view of an in-memory array
+    maxelems = default_chunk_size[] * 1e6 / elsize
+    cp = cumprod(size)
+    ii = something(findfirst(>=(maxelems), cp), length(size) + 1)
+    chunksize = ntuple(Val(length(size))) do idim
         if idim < ii
-            return size[idim]
+            size[idim]
         elseif idim > ii
-            return 1
+            1
         else
-            sizebefore = idim == 1 ? 1 : prod(size[1:(idim-1)])
-            return floor(Int, default_chunk_size[] * 1e6 / elsize / sizebefore)
+            sizebefore = idim == 1 ? 1 : cp[idim-1]
+            floor(Int, maxelems / sizebefore)
         end
     end
-    chunksizes = clamp.(chunksize, 1, size)
     return GridChunks(size, chunksize)
 end
