@@ -59,6 +59,25 @@ sum(a)  # uses DiskArrayEngineBackend regardless of the global setting
 Note that `BroadcastStyle` uses the global backend — it only sees the array's type, not the
 `withbackend` wrapper.
 
+## Broadcasting
+
+| Function | Signature |
+|----------|-----------|
+| `diskarrays_broadcaststyle` | `diskarrays_broadcaststyle(T::Type, ::ComputeBackend)`, defaults to `ChunkStyle{ndims(T)}()` |
+| `diskarrays_coptyo!` | `diskarrays_coptyo!(dest, bc::Broadcasted, ::ComputeBackend)`, for a `Broadcasted{Nothing}` into a disk array |
+| `diskarrays_fill!` | `diskarrays_fill!(dest, value, ::ComputeBackend)` |
+
+Broadcasting over a disk array is lazy: `s = a .+ 1` is a `BroadcastDiskArray`. When `s` is
+used in another broadcast, `s .* b`, DiskArrays fuses both into one pass over `a` and `b` by
+calling `DiskArrays.unwrap_broadcast` before `Broadcast.flatten`. A backend that returns its own
+style from `diskarrays_broadcaststyle` and defines `copy`/`copyto!` for it should do the same:
+
+```julia
+Base.copy(bc::Broadcasted{MyStyle{N}}) where {N} = my_lazy_array(Broadcast.flatten(DiskArrays.unwrap_broadcast(bc)))
+```
+
+`diskarrays_coptyo!` already receives the unwrapped expression.
+
 ## Error Hints
 
 DiskArrays registers a `MethodError` hint for `DiskArrayEngineBackend`. When a method is not
