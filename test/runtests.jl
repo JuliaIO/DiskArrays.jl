@@ -729,6 +729,17 @@ end
     @test DiskArrays.output_aliasing(di, 3, 3) == :identical
 end
 
+@testset "transfer_results with integer indices" begin
+    values = [1 2; 3 4]
+    temparray = zeros(Int, 3, 3)
+    @test DiskArrays.transfer_results_write!(values, temparray, (2, 1), (3, 2)) === temparray
+    @test temparray[3, 2] == 3
+    @test count(!iszero, temparray) == 1
+    out = zeros(Int, 2, 2)
+    @test DiskArrays.transfer_results_read!(out, temparray, (1, 2), (3, 2)) === out
+    @test out[1, 2] == 3
+end
+
 
 @testset "Getindex/Setindex with vectors" begin
     a = AccessCountDiskArray(reshape(1:20, 4, 5, 1); chunksize=(4, 1, 1))

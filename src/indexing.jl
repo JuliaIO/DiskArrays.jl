@@ -234,7 +234,7 @@ function transfer_results_write!(values, temparray, valuesindices, temparrayindi
     return temparray
 end
 function transfer_results_write!(values, temparray, vi::Tuple{Vararg{Int}}, ti::Tuple{Vararg{Int}})
-    temparray[ti...] = values[oi...]
+    temparray[ti...] = values[vi...]
     return temparray
 end
 
