@@ -1447,6 +1447,14 @@ end
     @test a1d[16:20] == tiles1d[4]
 end
 
+@testset "MultiReadArray" begin
+    m = DiskArrays.MultiReadArray(([(1, 2), (3, 4)], [(5,), (6,), (7,)]))
+    @test size(m) == (2, 3)
+    @test eachindex(m) == CartesianIndices((2, 3))
+    @test m[2, 3] == (3, 4, 7)
+    @test [m[i] for i in eachindex(m)] == [(i..., j...) for i in [(1, 2), (3, 4)], j in [(5,), (6,), (7,)]]
+end
+
 @testset "ChunkIndex" begin
     data = reshape(1:20, 4, 5)
     a = AccessCountDiskArray(data, chunksize=(2, 2))

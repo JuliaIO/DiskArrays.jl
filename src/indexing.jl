@@ -12,7 +12,6 @@ end
 
 Base.size(a::MultiReadArray) = _mapflatten(length, a.a)
 Base.IndexStyle(::Type{<:MultiReadArray}) = IndexCartesian()
-Base.eachindex(a::MultiReadArray) = CartesianIndices(size(a))
 Base.getindex(a::MultiReadArray{<:Any,N}, I::Vararg{Int,N}) where {N} =
     map(getindex, a.a, I) |> _flatten1
 
