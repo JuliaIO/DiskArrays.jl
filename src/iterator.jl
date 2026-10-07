@@ -28,7 +28,10 @@ function IterBlocks(a::AbstractArray{<:Any,N}) where {N}
         before *= sz[d]
     end
     kranges = collect(UnitRange{Int}, chunks[k])
-    grid = CartesianIndices(ntuple(d -> d < k ? 1 : d == k ? length(kranges) : sz[d], Val(N)))
+    # A fresh binding: capturing the loop-assigned `k` would box it
+    grid = let k = k
+        CartesianIndices(ntuple(d -> d < k ? 1 : d == k ? length(kranges) : sz[d], Val(N)))
+    end
     return IterBlocks{N}(sz, k, kranges, grid)
 end
 
