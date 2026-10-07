@@ -69,21 +69,25 @@ _diskarrays_mapreduce_impl(f, op, a::AbstractDiskArray, dims, ::Base._InitialVal
 
 
 
-# ── prod, all, any, minimum, maximum: current chunk iteration ─────────
-# ── Public convenience wrappers (sum, prod, all, any, min, max) ─────
-# These are actually redundant and would usually fall back to mapreduce except the ability
-# to short-circuit for any and all. We still define these here for DefaultBackend
-# to provide other backends the possibility to overload
+# ── Public convenience wrappers (sum, prod, minimum, maximum) ──────────
+# These would usually fall back to mapreduce; we define them so that other backends can
+# overload `diskarrays_<f>_impl`.
+for fname in (:sum, :prod, :minimum, :maximum)
+    @eval begin
+        # `F` forces specialization on `f`, which is only passed through here
+        function Base.$fname(f::F, a::AbstractDiskArray; kwargs...) where {F<:Function}
+            $(Symbol("diskarrays_$(fname)_impl"))(f, a, get_backend(a); kwargs...)
+        end
+        Base.$fname(a::AbstractDiskArray; kwargs...) = Base.$fname(identity, a; kwargs...)
+    end
+end
+
+# Backend hooks with chunk-wise defaults. For `any`/`all` the default stops at the first
+# chunk that decides the result.
 for fname in (:sum, :prod, :all, :any, :minimum, :maximum)
     fnameimpl = Symbol("diskarrays_$(fname)_impl")
     fnamedef = Symbol("_diskarrays_$(fname)_default")
     @eval begin
-        # `F` forces specialization on `f`, which is only passed through here
-        function Base.$fname(f::F, a::AbstractDiskArray; kwargs...) where {F<:Function}
-            $(fnameimpl)(f, a, get_backend(a); kwargs...)
-        end
-        Base.$fname(a::AbstractDiskArray; kwargs...) = Base.$fname(identity, a; kwargs...)
-
         $(fnameimpl)(f, a::AbstractDiskArray, ::ComputeBackend; dims=:) =
             $(fnamedef)(f, a; dims)
 
@@ -93,12 +97,40 @@ for fname in (:sum, :prod, :all, :any, :minimum, :maximum)
                     $fname(f, a[chunk...])
                 end
             else
-                # Here we call the base fallback, which will run into the mapreducedim! implementation above
-                invoke($fname, Tuple{typeof(f),AbstractArray{eltype(a),ndims(a)}}, f, a; dims)
+                _diskarrays_reduce_dims($fname, f, a, dims)
             end
         end
     end
 end
+# With `dims`, call Base's generic method, which runs into the `mapreducedim!` implementation
+# above. For `any`/`all` that is `_any`/`_all(f, A, dims)`: `any(f, A; dims)` itself would
+# come back to the `_any` hook below.
+_diskarrays_reduce_dims(fname, f, a, dims) =
+    invoke(fname, Tuple{typeof(f),AbstractArray{eltype(a),ndims(a)}}, f, a; dims)
+_diskarrays_reduce_dims(::typeof(any), f, a, dims) = invoke(Base._any, Tuple{Any,Any,Any}, f, a, dims)
+_diskarrays_reduce_dims(::typeof(all), f, a, dims) = invoke(Base._all, Tuple{Any,Any,Any}, f, a, dims)
+
+# `any`/`all` enter through the Base method that invalidates least on each Julia version:
+# - 1.11+: Base's internal `_any`/`_all(f, itr, dims)`. A method on `any(f, ::AbstractDiskArray)`
+#   invalidates every compiled `any(f, ::Any)` call (553 MethodInstances on 1.12). `f` stays
+#   untyped, so callable structs also read chunk by chunk.
+# - 1.10: public `any`/`all(f::Function, a)`, which cost 4 there; the `_any(f, a, ::Colon)` hook
+#   invalidates LinearAlgebra's `_any(f∘transpose, ::Any, :)` (~70). `dims` excludes `Colon`,
+#   which keeps the `dims` hook unambiguous with Base's `_any(f, itr, ::Colon)`.
+@static if VERSION < v"1.11-"
+    Base.any(f::F, a::AbstractDiskArray) where {F<:Function} = diskarrays_any_impl(f, a, get_backend(a))
+    Base.all(f::F, a::AbstractDiskArray) where {F<:Function} = diskarrays_all_impl(f, a, get_backend(a))
+    Base.any(a::AbstractDiskArray) = any(identity, a)
+    Base.all(a::AbstractDiskArray) = all(identity, a)
+    const _AnyAllDims = Union{Integer,Tuple{Vararg{Integer}},AbstractVector{<:Integer}}
+else
+    Base._any(f, a::AbstractDiskArray, ::Colon) = diskarrays_any_impl(f, a, get_backend(a))
+    Base._all(f, a::AbstractDiskArray, ::Colon) = diskarrays_all_impl(f, a, get_backend(a))
+    const _AnyAllDims = Any
+end
+# `any(f, a; dims)` and `any(a; dims)`
+Base._any(f, a::AbstractDiskArray, dims::_AnyAllDims) = diskarrays_any_impl(f, a, get_backend(a); dims)
+Base._all(f, a::AbstractDiskArray, dims::_AnyAllDims) = diskarrays_all_impl(f, a, get_backend(a); dims)
 
 Base.count(v::AbstractDiskArray) = count(identity, v::AbstractDiskArray)
 Base.count(f, v::AbstractDiskArray) = diskarrays_count_impl(f, v, get_backend(v))
