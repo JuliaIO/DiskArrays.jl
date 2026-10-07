@@ -1469,6 +1469,9 @@ end
     chunkinds_offset = ChunkIndices(a, offset=true)
     @test size(chunkinds_offset) == (2, 3)
     @test eltype(chunkinds_offset) == ChunkIndex{2,DiskArrays.OffsetChunks}
+    # The supertype carries the concrete element type
+    @test chunkinds isa AbstractArray{ChunkIndex{2,DiskArrays.OneBasedChunks},2}
+    @test eltype(collect(chunkinds_offset)) == ChunkIndex{2,DiskArrays.OffsetChunks}
     @test chunkinds_offset[1, 1] == ChunkIndex(1, 1, offset=true)
 end
 
