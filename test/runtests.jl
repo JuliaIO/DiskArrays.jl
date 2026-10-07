@@ -421,6 +421,11 @@ import Statistics: mean
         @test !all(==(true), db)
         @test getindex_count(da) == 2
         @test getindex_count(db) == 2
+        dc = AccessCountDiskArray(trues(4, 4), chunksize=(2, 2))
+        @test any(dc)
+        @test getindex_log(dc) == [(1:2, 1:2)]
+        @test !all(!, dc)
+        @test any(iszero, AccessCountDiskArray(zeros(4, 4), chunksize=(2, 2)); dims=1) == trues(1, 4)
     end
 end
 
