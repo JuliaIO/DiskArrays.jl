@@ -14,11 +14,16 @@ and this project adheres to [Semantic Versioning].
   whole chunks that fit in `default_chunk_size`; each chunk is read once when a block can span the last dimension.
 - `zip` with a disk array accepts any iterator.
 
+### Deprecated
+
+- `@implement_zip` and `@implement_generator` do nothing, and `@implement_diskarray_skip_zip` is
+  `@implement_diskarray`. Calling them emits a deprecation warning.
+
 ### Removed
 
-- `DiskZip`, `DiskGenerator`, `BlockedIndices`, the `@implement_zip`, `@implement_generator` and
-  `@implement_diskarray_skip_zip` macros, and their `Base.zip`, `Base.Generator` and `Base.eachindex`
-  methods, which invalidated much compiled code ([#175](https://github.com/JuliaIO/DiskArrays.jl/issues/175)).
+- The internal `DiskZip`, `DiskGenerator` and `BlockedIndices` types, and the `Base.zip`,
+  `Base.Generator` and `Base.eachindex` methods on disk arrays, which invalidated much compiled code
+  ([#175](https://github.com/JuliaIO/DiskArrays.jl/issues/175)).
 
 - Initial release
 

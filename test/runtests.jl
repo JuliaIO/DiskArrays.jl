@@ -1241,6 +1241,36 @@ struct TestArray{T,N} <: AbstractArray{T,N} end
 
 end
 
+# A disk array implemented with the macros, as by packages whose types are not `AbstractDiskArray`s
+struct MacroDiskArray{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
+    parent::A
+    chunksize::NTuple{N,Int}
+end
+Base.size(a::MacroDiskArray) = size(a.parent)
+DiskArrays.haschunks(::MacroDiskArray) = DiskArrays.Chunked()
+DiskArrays.eachchunk(a::MacroDiskArray) = DiskArrays.GridChunks(a, a.chunksize)
+DiskArrays.readblock!(a::MacroDiskArray, aout, i::AbstractUnitRange...) = aout .= a.parent[i...]
+DiskArrays.writeblock!(a::MacroDiskArray, v, i::AbstractUnitRange...) = view(a.parent, i...) .= v
+
+@testset "Deprecated zip and generator macros" begin
+    for m in (:var"@implement_zip", :var"@implement_generator", :var"@implement_diskarray_skip_zip")
+        ex = Expr(:macrocall, Expr(:., :DiskArrays, QuoteNode(m)), LineNumberNode(@__LINE__), :MacroDiskArray)
+        @test_deprecated macroexpand(@__MODULE__, ex)
+    end
+    Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
+        @eval DiskArrays.@implement_diskarray_skip_zip MacroDiskArray
+        @eval DiskArrays.@implement_zip MacroDiskArray
+        @eval DiskArrays.@implement_generator MacroDiskArray
+    end
+    a = reshape(1:60, 6, 10)
+    d = MacroDiskArray(collect(a), (4, 3))
+    @test DiskArrays.isdisk(d)
+    @test [x for x in d] == a
+    @test collect(zip(d, a)) == collect(zip(a, a))
+    @test map(x -> 2x, d) == 2a
+    @test d[2:3, 4] == a[2:3, 4]
+end
+
 # issue #123
 
 mutable struct ResizableArray{T,N} <: AbstractArray{T,N}
