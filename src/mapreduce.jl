@@ -49,9 +49,21 @@ macro implement_mapreduce(t)
 end
 
 
+# Chunk-wise with early stopping. Through Base's `_all`/`_any`, as LinearAlgebra does for
+# `Transpose`: methods on `all`/`any` themselves invalidate Base code calling them on arrays of
+# unknown type.
+for fname in [:all, :any]
+    _f = Symbol(:_, fname)
+    @eval function Base.$_f(f, v::AbstractDiskArray, ::Colon)
+        $fname(eachchunk(v)) do chunk
+            $fname(f, v[chunk...])
+        end
+    end
+end
+
 # Implementation for special cases and if fallback breaks in future julia versions
 
-for fname in [:sum, :prod, :all, :any, :minimum, :maximum]
+for fname in [:sum, :prod, :minimum, :maximum]
     @eval Base.$fname(v::AbstractDiskArray) = Base.$fname(identity, v::AbstractDiskArray)
     @eval function Base.$fname(f::Function, v::AbstractDiskArray)
         $fname(eachchunk(v)) do chunk
