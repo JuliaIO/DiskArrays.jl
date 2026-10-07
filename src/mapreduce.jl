@@ -71,14 +71,17 @@ _diskarrays_mapreduce_impl(f, op, a::AbstractDiskArray, dims, ::Base._InitialVal
 
 # ── Public convenience wrappers (sum, prod, minimum, maximum) ──────────
 # These would usually fall back to mapreduce; we define them so that other backends can
-# overload `diskarrays_<f>_impl`.
+# overload `diskarrays_<f>_impl`. They take no keywords: a keyword method adds a
+# `Core.kwcall` method that invalidates compiled `maximum(f, ::AbstractVector; init)`
+# callers (GeometryBasics, so every Makie session). With `dims` or `init`, Base's
+# method forwards to `mapreduce(...; dims, init)` above, which has its own backend hook.
 for fname in (:sum, :prod, :minimum, :maximum)
     @eval begin
         # `F` forces specialization on `f`, which is only passed through here
-        function Base.$fname(f::F, a::AbstractDiskArray; kwargs...) where {F<:Function}
-            $(Symbol("diskarrays_$(fname)_impl"))(f, a, get_backend(a); kwargs...)
+        function Base.$fname(f::F, a::AbstractDiskArray) where {F<:Function}
+            $(Symbol("diskarrays_$(fname)_impl"))(f, a, get_backend(a))
         end
-        Base.$fname(a::AbstractDiskArray; kwargs...) = Base.$fname(identity, a; kwargs...)
+        Base.$fname(a::AbstractDiskArray) = Base.$fname(identity, a)
     end
 end
 
@@ -149,10 +152,11 @@ function diskarrays_unique_impl(f, v::AbstractDiskArray, ::ComputeBackend)
 end
 
 
-function Base.extrema(f::F, a::AbstractDiskArray; kwargs...) where {F<:Function}
-    diskarrays_extrema_impl(f, a, get_backend(a); kwargs...)
-end
-Base.extrema(a::AbstractDiskArray; kwargs...) = extrema(identity, a; kwargs...)
+# No keywords, as for `maximum` above: `extrema(f, a; dims, init)` reaches the backend
+# through Base's `mapreduce` call
+Base.extrema(f::F, a::AbstractDiskArray) where {F<:Function} =
+    diskarrays_extrema_impl(f, a, get_backend(a))
+Base.extrema(a::AbstractDiskArray) = extrema(identity, a)
 
 diskarrays_extrema_impl(f, a::AbstractDiskArray, ::ComputeBackend; kwargs...) =
     invoke(extrema, Tuple{typeof(f),AbstractArray{eltype(a),ndims(a)}}, f, a; kwargs...)
