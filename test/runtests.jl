@@ -1041,7 +1041,66 @@ end
         finally
             DiskArrays.default_chunk_size[] = default_size
         end
-        @test maximum(r -> prod(length, r), getindex_log(d)) == 5
+        # Memory stays within one chunk, which reading a chunk needs anyway
+        @test maximum(r -> prod(length, r), getindex_log(d)) <= 5 * 3 * 2
+        @test elements_read(d) == length(a3)
+    end
+end
+
+# How often each chunk of `a` is read
+function chunk_reads(a, chunksize)
+    counts = Dict{Any,Int}()
+    for r in getindex_log(a)
+        for J in CartesianIndices(map((r, c) -> cld(first(r), c):cld(last(r), c), r, chunksize))
+            counts[J] = get(counts, J, 0) + 1
+        end
+    end
+    return counts
+end
+
+@testset "iteration reads chunks about once" begin
+    @testset "the leading dimensions fit: each chunk once" begin
+        a = rand(20, 18, 4)
+        d = AccessCountDiskArray(a; chunksize=(5, 3, 2))
+        @test [x for x in d] == a
+        counts = chunk_reads(d, (5, 3, 2))
+        @test length(counts) == length(eachchunk(d))
+        @test all(==(1), values(counts))
+    end
+    @testset "a chunk does not fit beside them: split it" begin
+        a = rand(3600, 180)
+        d = AccessCountDiskArray(a; chunksize=(64, 64))
+        default_size = DiskArrays.default_chunk_size[]
+        # 125_000 values: a 3600 × 64 strip of chunks does not fit, 3600 × 32 does
+        DiskArrays.default_chunk_size[] = 1
+        try
+            @test sum(x for x in d) ≈ sum(a)
+        finally
+            DiskArrays.default_chunk_size[] = default_size
+        end
+        counts = chunk_reads(d, (64, 64))
+        @test length(counts) == length(eachchunk(d))
+        @test all(==(2), values(counts))
+        @test elements_read(d) == length(a)
+        @test maximum(r -> prod(length, r), getindex_log(d)) <= 64 * 32
+    end
+    @testset "stopping early reads only the chunks reached" begin
+        a = collect(reshape(1:360, 20, 18))
+        d = AccessCountDiskArray(a; chunksize=(5, 3))
+        @test collect(Iterators.take(d, 7)) == 1:7
+        @test getindex_log(d) == [(1:5, 1:3), (6:10, 1:3)]
+        empty!(getindex_log(d))
+        # 26 is in the second column: the first needs the four chunks along it
+        @test any(x == 26 for x in d)
+        @test getindex_count(d) == 4
+    end
+    @testset "an earlier state stays valid" begin
+        a = collect(reshape(1:360, 20, 18))
+        d = ChunkedDiskArray(a; chunksize=(5, 3))
+        x, s = iterate(d)
+        rest = collect(Iterators.rest(d, s))
+        @test rest == vec(a)[2:end]
+        @test collect(Iterators.rest(d, s)) == rest
     end
 end
 
