@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased]
 
+## v0.4.25
+
 - `estimate_chunksize`, and so `eachchunk` of an in-memory array or view, no longer allocates
 - `element_size` also accepts an element type, `element_size(T::Type)`, so callers can
   size buffers before an array exists; `element_size(a::AbstractArray)` now forwards to it
