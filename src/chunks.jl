@@ -418,16 +418,19 @@ Base.eltype(::Type{<:ChunkIndices{N,<:Any,O}}) where {N,O} = ChunkIndex{N,O}
 
 """
     element_size(a::AbstractArray)
+    element_size(T::Type)
 
-Returns the approximate size of an element of a in bytes. This falls back to calling `sizeof` on 
-the element type or to the value stored in `DiskArrays.fallback_element_size`. Methods can be added for 
-custom containers. 
+Returns the approximate size of an element of `a`, or of an element of type `T`, in bytes:
+`sizeof` for bits types (ignoring a `Missing` in a `Union`), otherwise the value stored in
+`DiskArrays.fallback_element_size`. The type method lets callers size buffers before an
+array exists. Methods can be added for custom containers or element types.
 """
-function element_size(a::AbstractArray)
-    if isbitstype(eltype(a))
-        return sizeof(eltype(a))
-    elseif isbitstype(Base.nonmissingtype(eltype(a)))
-        return sizeof(Base.nonmissingtype(eltype(a)))
+element_size(a::AbstractArray) = element_size(eltype(a))
+function element_size(::Type{T}) where {T}
+    if isbitstype(T)
+        return sizeof(T)
+    elseif isbitstype(Base.nonmissingtype(T))
+        return sizeof(Base.nonmissingtype(T))
     else
         return fallback_element_size[]
     end
