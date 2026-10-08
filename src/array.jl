@@ -3,7 +3,9 @@ _disk_collect(a::AbstractArray{T,N}) where {T,N} = a[ntuple(_ -> :, Val{N}())...
 _disk_collect(a::AbstractArray{T,0}) where {T} = fill(a[])
 
 # Use broadcast to copy
-function _disk_copyto!(dest::AbstractArray{<:Any,N}, source::AbstractArray{<:Any,N}) where {N}
+function _disk_copyto!(
+    dest::AbstractArray{<:Any,N}, source::AbstractArray{<:Any,N}
+) where {N}
     return dest .= source
 end
 function _disk_copyto!(dest::AbstractArray, source::AbstractArray)
@@ -13,7 +15,11 @@ function _disk_copyto!(dest::AbstractArray, source::AbstractArray)
 end
 function _disk_copyto!(dest, Rdest, src, Rsrc)
     if size(Rdest) != size(Rsrc)
-        throw(ArgumentError("source and destination must have same size (got $(size(Rsrc)) and $(size(Rdest)))"))
+        throw(
+            ArgumentError(
+                "source and destination must have same size (got $(size(Rsrc)) and $(size(Rdest)))",
+            ),
+        )
     end
 
     if isempty(Rdest)
@@ -28,11 +34,14 @@ function _disk_copyto_5arg!(dest, dstart, src, sstart, n)
         return dest
     end
     if n < 0
-        throw(ArgumentError(LazyString("tried to copy n=",
-        n," elements, but n should be non-negative")))
+        throw(
+            ArgumentError(
+                LazyString("tried to copy n=", n, " elements, but n should be non-negative")
+            ),
+        )
     end
-    destv = view(dest, range(dstart, length=n))
-    DiskArrays.readblock!(src, destv, range(sstart, length=n))
+    destv = view(dest, range(dstart; length=n))
+    DiskArrays.readblock!(src, destv, range(sstart; length=n))
     return dest
 end
 
@@ -42,14 +51,14 @@ _disk_reverse(a, dims::Int) = _disk_reverse(a, (dims,))
 function _disk_reverse(A, dims::Tuple)
     rev_axes = map(ntuple(identity, ndims(A)), axes(A)) do d, a
         ax = StepRange(a)
-        d in dims ? reverse(ax) : ax
+        return d in dims ? reverse(ax) : ax
     end
     return view(A, rev_axes...)
 end
 
 _disk_reverse1(a) = _disk_reverse(a, 1)
 function _disk_reverse1(a, start::Int, stop::Int)
-    inds = [firstindex(a):start-1; stop:-1:start; stop+1:lastindex(a)]
+    inds = [firstindex(a):(start - 1); stop:-1:start; (stop + 1):lastindex(a)]
     return view(a, inds)
 end
 
@@ -89,10 +98,18 @@ macro implement_array_methods(t)
         function Base.copyto!(dest::PermutedDimsArray{T,N}, src::$t{T,N}) where {T,N}
             return $_disk_copyto!(dest, src)
         end
-        function Base.copyto!(dest::Vector, dstart::Integer, src::$t{<:Any, 1}, sstart::Integer, n::Integer)
+        function Base.copyto!(
+            dest::Vector, dstart::Integer, src::$t{<:Any,1}, sstart::Integer, n::Integer
+        )
             return $_disk_copyto_5arg!(dest, dstart, src, sstart, n)
         end
-        function Base.copyto!(dest::SubArray{T, 1, Vector{T}, <:Tuple{AbstractUnitRange}, true} where {T}, dstart::Integer, src::$t{<:Any, 1}, sstart::Integer, n::Integer)
+        function Base.copyto!(
+            dest::SubArray{T,1,Vector{T},<:Tuple{AbstractUnitRange},true} where {T},
+            dstart::Integer,
+            src::$t{<:Any,1},
+            sstart::Integer,
+            n::Integer,
+        )
             return $_disk_copyto_5arg!(dest, dstart, src, sstart, n)
         end
 
@@ -114,4 +131,3 @@ macro implement_array_methods(t)
         end
     end
 end
-

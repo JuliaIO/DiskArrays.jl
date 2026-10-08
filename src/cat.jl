@@ -23,33 +23,38 @@ struct ConcatDiskArray{T,N,P,C,HC,ID} <: AbstractDiskArray{T,N}
 end
 
 function infer_eltypes(arrays)
-    foldl(arrays, init=(-1, Union{})) do (M, T), a
+    foldl(arrays; init=(-1, Union{})) do (M, T), a
         if a isa AbstractArray
-            M == -1 || ndims(a) == M || throw(ArgumentError("All arrays to concatenate must have equal ndims"))
+            M == -1 ||
+                ndims(a) == M ||
+                throw(ArgumentError("All arrays to concatenate must have equal ndims"))
             M = ndims(a)
         elseif a === missing
-            throw(ArgumentError("Cannot concatenate arrays containing missing values. Use MissingTile(fillvalue) to mark a tile as missing."))
+            throw(
+                ArgumentError(
+                    "Cannot concatenate arrays containing missing values. Use MissingTile(fillvalue) to mark a tile as missing.",
+                ),
+            )
         end
-            (M, promote_type(eltype(a), T))
-        end
+        return (M, promote_type(eltype(a), T))
     end
+end
 
 function ConcatDiskArray(arrays::AbstractArray{<:AbstractArray})
     N = ndims(arrays)
     T = eltype(eltype(arrays))
     if !isconcretetype(T)
-        M,T = infer_eltypes(arrays)
+        M, T = infer_eltypes(arrays)
     else
         M = ndims(eltype(arrays))
     end
-    _ConcatDiskArray(arrays, T, Val(N), Val(M))
+    return _ConcatDiskArray(arrays, T, Val(N), Val(M))
 end
 function ConcatDiskArray(arrays::AbstractArray)
     N = ndims(arrays)
-    M,T = infer_eltypes(arrays)
-    _ConcatDiskArray(arrays, T, Val(N), Val(M))
+    M, T = infer_eltypes(arrays)
+    return _ConcatDiskArray(arrays, T, Val(N), Val(M))
 end
-
 
 function _ConcatDiskArray(arrays, T, ::Val{N}, ::Val{M}) where {N,M}
     if N < M
@@ -60,15 +65,17 @@ function _ConcatDiskArray(arrays, T, ::Val{N}, ::Val{M}) where {N,M}
         arrays1 = arrays
         D = N
     end
-    ConcatDiskArray(arrays1::AbstractArray, T, Val(D), Val(M))
+    return ConcatDiskArray(arrays1::AbstractArray, T, Val(D), Val(M))
 end
-function ConcatDiskArray(arrays1::AbstractArray, T, ::Val{D},::Val{ID}) where {D,ID}
+function ConcatDiskArray(arrays1::AbstractArray, T, ::Val{D}, ::Val{ID}) where {D,ID}
     startinds, sizes = arraysize_and_startinds(arrays1)
 
     chunks = concat_chunksize(arrays1)
     hc = Chunked(batchstrategy(chunks))
 
-    return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc),ID}(arrays1, startinds, sizes, chunks, hc,Val(ID))
+    return ConcatDiskArray{T,D,typeof(arrays1),typeof(chunks),typeof(hc),ID}(
+        arrays1, startinds, sizes, chunks, hc, Val(ID)
+    )
 end
 
 """
@@ -81,14 +88,16 @@ struct MissingTile{F,S}
     fillvalue::F
     size::S
 end
-MissingTile(fillvalue::F) where F = MissingTile{F,Nothing}(fillvalue, nothing)
-MissingTile(fillvalue::F, size::NTuple{N,<:Integer}) where {F,N} =
-    MissingTile{F,typeof(size)}(fillvalue, size)
+MissingTile(fillvalue::F) where {F} = MissingTile{F,Nothing}(fillvalue, nothing)
+function MissingTile(fillvalue::F, size::NTuple{N,<:Integer}) where {F,N}
+    return MissingTile{F,typeof(size)}(fillvalue, size)
+end
 Base.eltype(::Type{MissingTile{F,S}}) where {F,S} = F
 
-function extenddims(a::Tuple{Vararg{Any,N}}, b::Tuple{Vararg{Any,M}}, fillval) where {N,M} 
-    length(a) > length(b) && throw(ArgumentError("Tile dimensionality does not match grid dimensionality"))
-    extenddims((a..., fillval), b, fillval)
+function extenddims(a::Tuple{Vararg{Any,N}}, b::Tuple{Vararg{Any,M}}, fillval) where {N,M}
+    length(a) > length(b) &&
+        throw(ArgumentError("Tile dimensionality does not match grid dimensionality"))
+    return extenddims((a..., fillval), b, fillval)
 end
 extenddims(a::Tuple{Vararg{Any,N}}, _::Tuple{Vararg{Any,N}}, _) where {N} = a
 
@@ -116,11 +125,11 @@ function arraysize_and_startinds(arrays1)
         #Add starting 1
         pushfirst!(sizeall, 1)
         for i in 2:length(sizeall)
-            sizeall[i] = sizeall[i-1] + sizeall[i]
+            sizeall[i] = sizeall[i - 1] + sizeall[i]
         end
-        pop!(sizeall) - 1, sizeall
+        return pop!(sizeall) - 1, sizeall
     end
-    map(last, r), map(first, r)
+    return map(last, r), map(first, r)
 end
 
 # DiskArrays interface
@@ -137,7 +146,9 @@ function chunkexists(a::ConcatDiskArray, chunkidxs::Integer...)
     parent isa MissingTile && return false
     parentchunks = eachchunk(parent).chunks
     parentidx = ntuple(ninnerdims(a)) do d
-        findchunk(parentchunks[d], first(chunkrange[d]) - a.startinds[d][tileidx[d]] + 1)
+        return findchunk(
+            parentchunks[d], first(chunkrange[d]) - a.startinds[d][tileidx[d]] + 1
+        )
     end
     return chunkexists(parent, parentidx...)
 end
@@ -148,7 +159,7 @@ function readblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
         vout = view(aout, outer_range...)
         if I isa CartesianIndex
             readblock!(a.parents[I], vout, array_range...)
-        else 
+        else
             vout .= (I.fillvalue,)
         end
     end
@@ -166,7 +177,7 @@ end
 
 # Utils
 ninnerdims(a::ConcatDiskArray) = ninnerdims(a.innerdims)
-ninnerdims(::Val{ID}) where ID = ID
+ninnerdims(::Val{ID}) where {ID} = ID
 
 function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
     # Find affected blocks and indices in blocks
@@ -174,18 +185,22 @@ function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
     blockinds = map(inds, a.startinds, size(a.parents)) do i, si, s
         bi1 = max(searchsortedlast(si, first(i)), 1)
         bi2 = min(searchsortedfirst(si, last(i) + 1) - 1, s)
-        bi1:bi2
+        return bi1:bi2
     end
     map(CartesianIndices(blockinds)) do cI
         myar = a.parents[cI]
         size_inferred = map(a.startinds, size(a), cI.I) do si, sa, ii
-            ii == length(si) ? sa - si[ii] + 1 : si[ii+1] - si[ii]
+            return ii == length(si) ? sa - si[ii] + 1 : si[ii + 1] - si[ii]
         end
         array_range = map(cI.I, a.startinds, size_inferred, inds) do ii, si, ms, indstoread
-            max(first(indstoread) - si[ii] + 1, 1):min(last(indstoread) - si[ii] + 1, ms)
+            return max(first(indstoread) - si[ii] + 1, 1):min(
+                last(indstoread) - si[ii] + 1, ms
+            )
         end
         outer_range = map(cI.I, a.startinds, array_range, inds) do ii, si, ar, indstoread
-            (first(ar)+si[ii]-first(indstoread)):(last(ar)+si[ii]-first(indstoread))
+            return (first(ar) + si[ii] - first(indstoread)):(last(ar) + si[ii] - first(
+                indstoread
+            ))
         end
         #Shorten array range to shape of actual array
         array_range = ntuple(j -> array_range[j], ID)
@@ -197,16 +212,25 @@ function _concat_diskarray_block_io(f, a::ConcatDiskArray, inds...)
         end
     end
 end
-fix_outerrangeshape(outer_range, array_range) = fix_outerrangeshape((), outer_range, array_range)
-fix_outerrangeshape(res, outer_range, array_range) =
-    fix_outerrangeshape((res..., first(outer_range)), Base.tail(outer_range), Base.tail(array_range))
-fix_outerrangeshape(res, outer_range, ::Tuple{}) =
-    fix_outerrangeshape((res..., only(first(outer_range))), Base.tail(outer_range), ())
+function fix_outerrangeshape(outer_range, array_range)
+    return fix_outerrangeshape((), outer_range, array_range)
+end
+function fix_outerrangeshape(res, outer_range, array_range)
+    return fix_outerrangeshape(
+        (res..., first(outer_range)), Base.tail(outer_range), Base.tail(array_range)
+    )
+end
+function fix_outerrangeshape(res, outer_range, ::Tuple{})
+    return fix_outerrangeshape(
+        (res..., only(first(outer_range))), Base.tail(outer_range), ()
+    )
+end
 fix_outerrangeshape(res, ::Tuple{}, ::Tuple{}) = res
 
-
 function concat_chunksize(parents)
-    newchunks = map(s -> Vector{Union{RegularChunks,IrregularChunks}}(undef, s), size(parents))
+    newchunks = map(
+        s -> Vector{Union{RegularChunks,IrregularChunks}}(undef, s), size(parents)
+    )
     for i in CartesianIndices(parents)
         array = parents[i]
         array isa MissingTile && continue
@@ -228,7 +252,7 @@ function concat_chunksize(parents)
         end
         # Merge the chunks
         init = RegularChunks(approx_chunksize(first(v)), 0, 0)
-        reduce(mergechunks, v; init=init)
+        return reduce(mergechunks, v; init=init)
     end
     extenddims(newchunks, size(parents), RegularChunks(1, 0, 1))
     return GridChunks(newchunks...)
@@ -243,8 +267,9 @@ function mergechunks(a::RegularChunks, b::RegularChunks)
 end
 mergechunks(a::ChunkVector, b::ChunkVector) = mergechunks_irregular(a, b)
 
-mergechunks_irregular(a, b) =
-    IrregularChunks(; chunksizes=filter(!iszero, [length.(a); length.(b)]))
+function mergechunks_irregular(a, b)
+    return IrregularChunks(; chunksizes=filter(!iszero, [length.(a); length.(b)]))
+end
 
 function cat_disk(dims, As::AbstractArray...)
     if length(dims) == 1
@@ -256,7 +281,7 @@ function cat_disk(dims, As::AbstractArray...)
 end
 function cat_disk(dims::Int, As::AbstractArray...)
     sz = map(ntuple(identity, dims)) do i
-        i == dims ? length(As) : 1
+        return i == dims ? length(As) : 1
     end
     cdas = reshape(collect(As), sz)
     return ConcatDiskArray(cdas)

@@ -48,7 +48,6 @@ macro implement_mapreduce(t)
     end
 end
 
-
 # Implementation for special cases and if fallback breaks in future julia versions
 
 for fname in [:sum, :prod, :all, :any, :minimum, :maximum]
@@ -63,13 +62,13 @@ end
 Base.count(v::AbstractDiskArray) = count(identity, v::AbstractDiskArray)
 function Base.count(f, v::AbstractDiskArray)
     sum(eachchunk(v)) do chunk
-        count(f, v[chunk...])
+        return count(f, v[chunk...])
     end
 end
 
 Base.unique(v::AbstractDiskArray) = unique(identity, v)
 function Base.unique(f, v::AbstractDiskArray)
     reduce((unique(f, v[c...]) for c in eachchunk(v))) do acc, u
-        unique!(f, append!(acc, u))
+        return unique!(f, append!(acc, u))
     end
 end
