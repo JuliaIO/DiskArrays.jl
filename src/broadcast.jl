@@ -23,14 +23,31 @@ end
 # Base methods
 
 Base.size(a::BroadcastDiskArray) = size(a.broadcasted)
-Base.broadcastable(a::BroadcastDiskArray) = a.broadcasted
 Base.copy(a::BroadcastDiskArray) = copyto!(zeros(eltype(a), size(a)), a.broadcasted)
 
+"""
+    unwrap_broadcast(bc::Broadcasted)
+
+Replace each lazy `BroadcastDiskArray` in the arguments of `bc`, at any depth, with the
+`Broadcasted` it wraps, so that `Broadcast.flatten` fuses the whole expression into one
+function over the leaf arrays. `s = a .+ 1; s .* b` is then computed in a single pass,
+without materialising `s` chunk by chunk. The style of each `Broadcasted` is kept.
+
+DiskArrays calls this in its own `ChunkStyle` `copy`/`copyto!` methods and before handing a
+`Broadcasted{Nothing}` to `diskarrays_coptyo!`. A backend that returns its own style from
+`diskarrays_broadcaststyle` should call it in its `copy`/`copyto!` methods for that style
+to keep nested lazy broadcasts fused.
+"""
+unwrap_broadcast(x) = x
+unwrap_broadcast(a::BroadcastDiskArray) = unwrap_broadcast(a.broadcasted)
+unwrap_broadcast(bc::Broadcasted{S}) where {S} =
+    Broadcasted{S}(bc.f, map(unwrap_broadcast, bc.args), bc.axes)
+
 Base.copy(broadcasted::Broadcasted{ChunkStyle{N}}) where {N} =
-    BroadcastDiskArray(flatten(broadcasted))
+    BroadcastDiskArray(flatten(unwrap_broadcast(broadcasted)))
 @inline Base.copy(broadcasted::Broadcasted{ChunkStyle{0}}) = broadcasted[CartesianIndex()]
 function Base.copyto!(dest::AbstractArray, broadcasted::Broadcasted{ChunkStyle{N}}) where {N}
-    bcf = flatten(broadcasted)
+    bcf = flatten(unwrap_broadcast(broadcasted))
     # Get a list of chunks to apply
     gcd = common_chunks(size(bcf), dest, bcf.args...)
     # Apply the broadcast to dest chunk by chunk
@@ -174,7 +191,8 @@ macro implement_broadcast(t)
     t = esc(t)
     quote
         # Broadcasting with a DiskArray on LHS
-        Base.copyto!(dest::$t, bc::Broadcasted{Nothing}) = diskarrays_coptyo!(dest, bc, get_backend(dest))
+        Base.copyto!(dest::$t, bc::Broadcasted{Nothing}) =
+            diskarrays_coptyo!(dest, unwrap_broadcast(bc), get_backend(dest))
         Base.BroadcastStyle(T::Type{<:$t}) = diskarrays_broadcaststyle(T, get_backend(compute_backend))
         function DiskArrays.subsetarg(arg::$t, ranges)
             ashort = maybeonerange(size(arg), ranges)

@@ -431,6 +431,76 @@ end
     end
 end
 
+# Records the `Broadcasted` that reaches the `diskarrays_coptyo!` backend hook
+struct RecordingBroadcastBackend <: DiskArrays.ComputeBackend
+    seen::Vector{Any}
+end
+function DiskArrays.diskarrays_coptyo!(dest, bc, b::RecordingBroadcastBackend)
+    push!(b.seen, bc)
+    return invoke(DiskArrays.diskarrays_coptyo!, Tuple{Any,Any,DiskArrays.ComputeBackend}, dest, bc, b)
+end
+
+@testset "Nested lazy broadcasts fuse" begin
+    A1, A2, A3 = (reshape(Float64.(i:i+399), 20, 20) for i in 1:3)
+    expected = (A1 .+ A2 .* 2) ./ A3
+    counted() = map(A -> AccessCountDiskArray(A; chunksize=(5, 5)), (A1, A2, A3))
+    isfused(bc) = length(bc.args) == 4 && !any(x -> x isa DiskArrays.BroadcastDiskArray, bc.args)
+
+    a1, a2, a3 = counted()
+    s = a1 .+ a2 .* 2
+    s2 = s ./ a3
+    @test s2 isa DiskArrays.BroadcastDiskArray
+    # The inner lazy broadcast is merged into the outer one, over the leaf arrays
+    @test isfused(s2.broadcasted)
+    @test collect(s2) == expected
+    @test getindex_count.((a1, a2, a3)) == (1, 1, 1)
+
+    # Chunk by chunk into an Array and into a disk array: each chunk of each leaf is read once
+    a1, a2, a3 = counted()
+    s = a1 .+ a2 .* 2
+    dest = zeros(20, 20)
+    dest .= s ./ a3
+    @test dest == expected
+    @test getindex_count.((a1, a2, a3)) == (16, 16, 16)
+    a1, a2, a3 = counted()
+    s = a1 .+ a2 .* 2
+    ddest = AccessCountDiskArray(zeros(20, 20); chunksize=(5, 5))
+    ddest .= s ./ a3
+    @test trueparent(ddest) == expected
+    @test getindex_count.((a1, a2, a3)) == (16, 16, 16)
+    @test setindex_count(ddest) == 16
+
+    # Fused, a nested expression allocates no more than the same expression written at once
+    c1, c2, c3 = map(A -> ChunkedDiskArray(A; chunksize=(5, 5)), (A1, A2, A3))
+    cs = c1 .+ c2 .* 2
+    nested(cs, c3) = collect(cs ./ c3)
+    direct(c1, c2, c3) = collect((c1 .+ c2 .* 2) ./ c3)
+    nested!(dest, cs, c3) = (dest .= cs ./ c3)
+    direct!(dest, c1, c2, c3) = (dest .= (c1 .+ c2 .* 2) ./ c3)
+    @test nested(cs, c3) == direct(c1, c2, c3) == expected
+    @test nested!(dest, cs, c3) == direct!(dest, c1, c2, c3) == expected
+    @test (@allocated nested(cs, c3)) <= (@allocated direct(c1, c2, c3))
+    @test (@allocated nested!(dest, cs, c3)) <= (@allocated direct!(dest, c1, c2, c3))
+
+    @testset "backends" begin
+        # A backend with its own broadcast style fuses by calling `unwrap_broadcast`
+        bc = Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{2}}(/, (cs, c3))
+        u = DiskArrays.unwrap_broadcast(bc)
+        @test u isa Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{2}}
+        @test u.args[1] isa Broadcast.Broadcasted{DiskArrays.ChunkStyle{2}}
+        @test isfused(Broadcast.flatten(u))
+        @test DiskArrays.unwrap_broadcast(c3) === c3
+        # The `diskarrays_coptyo!` hook receives the unwrapped expression
+        rb = RecordingBroadcastBackend([])
+        wdest = withbackend(ChunkedDiskArray(zeros(20, 20); chunksize=(5, 5)), rb)
+        bcn = convert(Broadcast.Broadcasted{Nothing}, Broadcast.instantiate(Broadcast.broadcasted(/, cs, c3)))
+        copyto!(wdest, bcn)
+        @test !any(x -> x isa DiskArrays.BroadcastDiskArray, only(rb.seen).args)
+        @test isfused(Broadcast.flatten(only(rb.seen)))
+        @test collect(wdest) == expected
+    end
+end
+
 @testset "zip" begin
     a = rand(10, 9, 2)
     b = rand(10, 9, 2)
