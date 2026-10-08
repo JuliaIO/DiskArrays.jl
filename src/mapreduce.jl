@@ -69,42 +69,103 @@ _diskarrays_mapreduce_impl(f, op, a::AbstractDiskArray, dims, ::Base._InitialVal
 
 
 
-# ── prod, all, any, minimum, maximum: current chunk iteration ─────────
-# ── Public convenience wrappers (sum, prod, all, any, min, max) ─────
-# These are actually redundant and would usually fall back to mapreduce except the ability
-# to short-circuit for any and all. We still define these here for DefaultBackend
-# to provide other backends the possibility to overload
+# ── Backend hooks for sum, prod, minimum, maximum, extrema ──────────
+# Whole-array calls without keywords enter through public methods without keywords, so they
+# add no `Core.kwcall` method on the public functions.
+for fname in (:sum, :prod, :minimum, :maximum, :extrema)
+    @eval begin
+        # `F` forces specialization on `f`, which is only passed through here
+        Base.$fname(f::F, a::AbstractDiskArray) where {F<:Function} =
+            $(Symbol(:diskarrays_, fname, :_impl))(f, a, get_backend(a))
+        Base.$fname(a::AbstractDiskArray) = Base.$fname(identity, a)
+    end
+end
+
+# Every public `sum` method calls Base's internal `_sum(f, a, dims; kw...)`, and likewise for
+# `prod`, `minimum`, `maximum` and `extrema`. `dims` excludes `Colon`, so compiled whole-array
+# calls stay valid.
+const _ReduceDims = Union{Integer,Tuple{Vararg{Integer}},AbstractVector{<:Integer}}
+for fname in (:sum, :prod, :minimum, :maximum, :extrema)
+    @eval Base.$(Symbol(:_, fname))(f::F, a::AbstractDiskArray, dims::_ReduceDims; kw...) where {F} =
+        $(Symbol(:diskarrays_, fname, :_impl))(f, a, get_backend(a); dims, kw...)
+end
+
+# Whole-array calls with `init`: `sum(f, a; init)` and `sum(a; init)` both call
+# `Base._sum(f, a, :; init)`. Only its keyword-call method is defined, so positional
+# whole-array calls keep the public methods above. It invalidates compiled
+# `maximum(f, ::AbstractVector; init)` callers such as GeometryBasics' (6–13 MethodInstances
+# in a Makie session).
+for fname in (:sum, :prod, :minimum, :maximum, :extrema)
+    @eval Core.kwcall(kw::NamedTuple, ::typeof(Base.$(Symbol(:_, fname))), f::F, a::AbstractDiskArray, ::Colon) where {F} =
+        $(Symbol(:diskarrays_, fname, :_impl))(f, a, get_backend(a); kw...)
+end
+
+# Chunk-wise defaults for the whole-array reductions without `init`. For `any`/`all` they stop
+# at the first chunk that decides the result.
 for fname in (:sum, :prod, :all, :any, :minimum, :maximum)
     fnameimpl = Symbol("diskarrays_$(fname)_impl")
     fnamedef = Symbol("_diskarrays_$(fname)_default")
     @eval begin
-        # `F` forces specialization on `f`, which is only passed through here
-        function Base.$fname(f::F, a::AbstractDiskArray; kwargs...) where {F<:Function}
-            $(fnameimpl)(f, a, get_backend(a); kwargs...)
-        end
-        Base.$fname(a::AbstractDiskArray; kwargs...) = Base.$fname(identity, a; kwargs...)
+        $(fnameimpl)(f, a::AbstractDiskArray, ::ComputeBackend; dims=:, kw...) =
+            $(fnamedef)(f, a; dims, kw...)
 
-        $(fnameimpl)(f, a::AbstractDiskArray, ::ComputeBackend; dims=:) =
-            $(fnamedef)(f, a; dims)
-
-        function $(fnamedef)(f, a::AbstractDiskArray; dims=:)
-            if dims === Colon()
+        function $(fnamedef)(f, a::AbstractDiskArray; dims=:, kw...)
+            if dims === Colon() && isempty(kw)
                 $fname(eachchunk(a)) do chunk
                     $fname(f, a[chunk...])
                 end
             else
-                # Here we call the base fallback, which will run into the mapreducedim! implementation above
-                invoke($fname, Tuple{typeof(f),AbstractArray{eltype(a),ndims(a)}}, f, a; dims)
+                _diskarrays_reduce_generic($fname, f, a, dims; kw...)
             end
         end
     end
 end
+diskarrays_extrema_impl(f, a::AbstractDiskArray, ::ComputeBackend; dims=:, kw...) =
+    _diskarrays_reduce_generic(extrema, f, a, dims; kw...)
 
-Base.count(v::AbstractDiskArray) = count(identity, v::AbstractDiskArray)
-Base.count(f, v::AbstractDiskArray) = diskarrays_count_impl(f, v, get_backend(v))
-function diskarrays_count_impl(f, v::AbstractDiskArray, ::ComputeBackend)
-    sum(eachchunk(v)) do chunk
-        count(f, v[chunk...])
+# Base's generic `_sum(f, A, dims; kw...)` and its siblings call `mapreduce`, which reads the
+# array chunk by chunk through `diskarrays_mapreduce_impl`. The public `sum(f, A; dims)` would
+# come back to the hooks above.
+for fname in (:sum, :prod, :minimum, :maximum, :extrema, :any, :all)
+    _fname = Symbol(:_, fname)
+    @eval _diskarrays_reduce_generic(::typeof($fname), f, a, dims; kw...) =
+        invoke(Base.$_fname, Tuple{Any,Any,Any}, f, a, dims; kw...)
+end
+
+# `any`/`all` enter through the Base method that invalidates least on each Julia version:
+# - 1.11+: Base's internal `_any`/`_all(f, itr, dims)`. A method on `any(f, ::AbstractDiskArray)`
+#   invalidates every compiled `any(f, ::Any)` call (553 MethodInstances on 1.12). `f` stays
+#   untyped, so callable structs also read chunk by chunk.
+# - 1.10: public `any`/`all(f::Function, a)`. There the `_any(f, a, ::Colon)` hook invalidates
+#   LinearAlgebra's `_any(f∘transpose, …)` callers (44–66 MethodInstances). `dims` excludes
+#   `Colon`, which keeps the `dims` hook unambiguous with Base's `_any(f, itr, ::Colon)`.
+@static if VERSION < v"1.11-"
+    Base.any(f::F, a::AbstractDiskArray) where {F<:Function} = diskarrays_any_impl(f, a, get_backend(a))
+    Base.all(f::F, a::AbstractDiskArray) where {F<:Function} = diskarrays_all_impl(f, a, get_backend(a))
+    Base.any(a::AbstractDiskArray) = any(identity, a)
+    Base.all(a::AbstractDiskArray) = all(identity, a)
+    const _AnyAllDims = _ReduceDims
+else
+    Base._any(f, a::AbstractDiskArray, ::Colon) = diskarrays_any_impl(f, a, get_backend(a))
+    Base._all(f, a::AbstractDiskArray, ::Colon) = diskarrays_all_impl(f, a, get_backend(a))
+    const _AnyAllDims = Any
+end
+# `any(f, a; dims)` and `any(a; dims)`
+Base._any(f, a::AbstractDiskArray, dims::_AnyAllDims) = diskarrays_any_impl(f, a, get_backend(a); dims)
+Base._all(f, a::AbstractDiskArray, dims::_AnyAllDims) = diskarrays_all_impl(f, a, get_backend(a); dims)
+
+# `count(f, a; dims, init)` and `count(a; dims, init)` both call Base's internal
+# `_count(f, a, dims, init)`. The whole-array count with the default `init` calls the hook
+# without keywords.
+Base._count(f::F, v::AbstractDiskArray, ::Colon, init) where {F} =
+    init === 0 ? diskarrays_count_impl(f, v, get_backend(v)) :
+    diskarrays_count_impl(f, v, get_backend(v); init)
+Base._count(f::F, v::AbstractDiskArray, dims, init) where {F} =
+    diskarrays_count_impl(f, v, get_backend(v); dims, init)
+function diskarrays_count_impl(f, v::AbstractDiskArray, ::ComputeBackend; dims=:, init=0)
+    dims === Colon() || return invoke(Base._count, Tuple{Any,AbstractArray,Any,Any}, f, v, dims, init)
+    return foldl(eachchunk(v); init) do n, chunk
+        count(f, v[chunk...]; init=n)
     end
 end
 
@@ -116,14 +177,6 @@ function diskarrays_unique_impl(f, v::AbstractDiskArray, ::ComputeBackend)
     end
 end
 
-
-function Base.extrema(f::F, a::AbstractDiskArray; kwargs...) where {F<:Function}
-    diskarrays_extrema_impl(f, a, get_backend(a); kwargs...)
-end
-Base.extrema(a::AbstractDiskArray; kwargs...) = extrema(identity, a; kwargs...)
-
-diskarrays_extrema_impl(f, a::AbstractDiskArray, ::ComputeBackend; kwargs...) =
-    invoke(extrema, Tuple{typeof(f),AbstractArray{eltype(a),ndims(a)}}, f, a; kwargs...)
 
 
 # Stubs for functions that will be created once Statistics.jl is loaded

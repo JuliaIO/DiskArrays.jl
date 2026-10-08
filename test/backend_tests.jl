@@ -223,6 +223,150 @@ function test_backend_dispatch()
     @test occursin("using DiskArrayEngine", sprint(showerror, err))
 end
 
+# ── Reductions reach the backend hooks ──────────────────────────────────────
+
+"""
+    CountingBackend()
+
+Counts the calls of each `diskarrays_*_impl` hook, then runs the default implementation.
+"""
+struct CountingBackend <: DiskArrays.ComputeBackend
+    calls::Dict{Symbol,Int}
+end
+CountingBackend() = CountingBackend(Dict{Symbol,Int}())
+bump!(b::CountingBackend, hook) = (b.calls[hook] = get(b.calls, hook, 0) + 1; b)
+for hook in (:sum, :prod, :all, :any, :minimum, :maximum, :extrema)
+    impl = Symbol(:diskarrays_, hook, :_impl)
+    @eval function DiskArrays.$impl(f, a::DiskArrays.AbstractDiskArray, b::CountingBackend; kw...)
+        bump!(b, $(QuoteNode(hook)))
+        return invoke(DiskArrays.$impl, Tuple{Any,DiskArrays.AbstractDiskArray,DiskArrays.ComputeBackend}, f, a, b; kw...)
+    end
+end
+function DiskArrays.diskarrays_count_impl(f, a::DiskArrays.AbstractDiskArray, b::CountingBackend; kw...)
+    bump!(b, :count)
+    return invoke(DiskArrays.diskarrays_count_impl, Tuple{Any,DiskArrays.AbstractDiskArray,DiskArrays.ComputeBackend}, f, a, b; kw...)
+end
+function DiskArrays.diskarrays_mapreduce_impl(f, op, a, dims, init, b::CountingBackend)
+    bump!(b, :mapreduce)
+    return invoke(DiskArrays.diskarrays_mapreduce_impl, Tuple{Any,Any,Any,Any,Any,DiskArrays.ComputeBackend}, f, op, a, dims, init, b)
+end
+
+# Each call form of each reduction gives the Array result and goes through the reduction's own
+# backend hook, with and without `dims` and `init`.
+function test_reductions_reach_backend()
+    A = reshape(range(0.5, 1.5; length=40), 5, 8)
+    B = A .> 1
+    dA, dB = AccessCountDiskArray(A; chunksize=(2, 3)), AccessCountDiskArray(B; chunksize=(2, 3))
+    f = x -> 2x + 1
+    p = x -> x > 1.2
+    forms = [
+        # (name, call on an array, hook it reaches)
+        ("sum(a)", a -> sum(a), :sum), ("sum(f, a)", a -> sum(f, a), :sum),
+        ("sum(f, a; dims=1)", a -> sum(f, a; dims=1), :sum),
+        ("sum(a; dims=(1, 2))", a -> sum(a; dims=(1, 2)), :sum),
+        ("sum(f, a; init=1.0)", a -> sum(f, a; init=1.0), :sum),
+        ("sum(a; init=1.0)", a -> sum(a; init=1.0), :sum),
+        ("sum(a; dims=2, init=1.0)", a -> sum(a; dims=2, init=1.0), :sum),
+        ("prod(a)", a -> prod(a), :prod), ("prod(f, a)", a -> prod(f, a), :prod),
+        ("prod(f, a; dims=1)", a -> prod(f, a; dims=1), :prod),
+        ("prod(a; dims=(1, 2))", a -> prod(a; dims=(1, 2)), :prod),
+        ("prod(f, a; init=2.0)", a -> prod(f, a; init=2.0), :prod),
+        ("prod(a; init=2.0)", a -> prod(a; init=2.0), :prod),
+        ("maximum(a)", a -> maximum(a), :maximum), ("maximum(f, a)", a -> maximum(f, a), :maximum),
+        ("maximum(f, a; dims=1)", a -> maximum(f, a; dims=1), :maximum),
+        ("maximum(a; dims=(1, 2))", a -> maximum(a; dims=(1, 2)), :maximum),
+        ("maximum(f, a; init=0.9)", a -> maximum(f, a; init=0.9), :maximum),
+        ("maximum(a; init=0.9)", a -> maximum(a; init=0.9), :maximum),
+        ("maximum(a; dims=1, init=1.2)", a -> maximum(a; dims=1, init=1.2), :maximum),
+        ("minimum(a)", a -> minimum(a), :minimum), ("minimum(f, a)", a -> minimum(f, a), :minimum),
+        ("minimum(f, a; dims=1)", a -> minimum(f, a; dims=1), :minimum),
+        ("minimum(a; dims=(1, 2))", a -> minimum(a; dims=(1, 2)), :minimum),
+        ("minimum(f, a; init=-2.0)", a -> minimum(f, a; init=-2.0), :minimum),
+        ("minimum(a; init=-2.0)", a -> minimum(a; init=-2.0), :minimum),
+        ("extrema(a)", a -> extrema(a), :extrema), ("extrema(f, a)", a -> extrema(f, a), :extrema),
+        ("extrema(f, a; dims=1)", a -> extrema(f, a; dims=1), :extrema),
+        ("extrema(a; dims=(1, 2))", a -> extrema(a; dims=(1, 2)), :extrema),
+        ("extrema(f, a; init=(0.0, 0.1))", a -> extrema(f, a; init=(0.0, 0.1)), :extrema),
+        ("extrema(a; init=(0.0, 0.1))", a -> extrema(a; init=(0.0, 0.1)), :extrema),
+        ("count(p, a)", a -> count(p, a), :count),
+        ("count(p, a; dims=1)", a -> count(p, a; dims=1), :count),
+        ("count(p, a; dims=(1, 2))", a -> count(p, a; dims=(1, 2)), :count),
+        ("count(p, a; init=3)", a -> count(p, a; init=3), :count),
+        ("count(p, a; dims=2, init=3)", a -> count(p, a; dims=2, init=3), :count),
+        ("mapreduce(f, +, a)", a -> mapreduce(f, +, a), :mapreduce),
+        ("mapreduce(f, +, a; dims=1, init=1.0)", a -> mapreduce(f, +, a; dims=1, init=1.0), :mapreduce),
+        ("any(p, a)", a -> any(p, a), :any),
+        ("any(p, a; dims=1)", a -> any(p, a; dims=1), :any),
+        ("any(p, a; dims=(1, 2))", a -> any(p, a; dims=(1, 2)), :any),
+        ("all(p, a)", a -> all(p, a), :all),
+        ("all(p, a; dims=1)", a -> all(p, a; dims=1), :all),
+        ("all(p, a; dims=(1, 2))", a -> all(p, a; dims=(1, 2)), :all),
+    ]
+    # Forms without `f` for the Boolean reductions, on a Bool array
+    bforms = [
+        ("any(b)", b -> any(b), :any), ("any(b; dims=1)", b -> any(b; dims=1), :any),
+        ("any(b; dims=(1, 2))", b -> any(b; dims=(1, 2)), :any),
+        ("all(b)", b -> all(b), :all), ("all(b; dims=1)", b -> all(b; dims=1), :all),
+        ("all(b; dims=(1, 2))", b -> all(b; dims=(1, 2)), :all),
+        ("count(b)", b -> count(b), :count), ("count(b; dims=1)", b -> count(b; dims=1), :count),
+        ("count(b; init=3)", b -> count(b; init=3), :count),
+    ]
+    for (forms, mem, disk) in ((forms, A, dA), (bforms, B, dB))
+        for (name, call, hook) in forms
+            @testset "$name" begin
+                cb = CountingBackend()
+                wa = withbackend(disk, cb)
+                expected = call(mem)
+                result = call(wa)
+                if expected isa AbstractArray
+                    @test result isa AbstractArray && size(result) == size(expected)
+                    @test all(map((x, y) -> all(isapprox.(x, y)), result, expected))
+                else
+                    @test all(isapprox.(result, expected))
+                end
+                @test get(cb.calls, hook, 0) == 1
+            end
+        end
+    end
+end
+
+# `any`/`all` stop at the first chunk that decides the result
+function test_any_all_short_circuit()
+    a = AccessCountDiskArray(reshape(1:64, 8, 8); chunksize=(4, 4))
+    @test any(>(0), a) && getindex_log(a) == [(1:4, 1:4)]
+    empty!(getindex_log(a))
+    @test !all(<(0), a) && getindex_log(a) == [(1:4, 1:4)]
+    empty!(getindex_log(a))
+    # 33 is at [1, 5], in the third chunk: three reads
+    @test any(==(33), a) && getindex_count(a) == 3
+    empty!(getindex_log(a))
+    @test !any(>(64), a) && getindex_count(a) == 4
+    b = AccessCountDiskArray(trues(8, 8); chunksize=(4, 4))
+    @test any(b) && getindex_count(b) == 1
+    @test !all(!, b) && getindex_count(b) == 2
+    # `dims` reads every chunk once
+    empty!(getindex_log(a))
+    @test any(>(60), a; dims=1) == any(>(60), reshape(1:64, 8, 8); dims=1)
+    @test getindex_count(a) == 4
+    # From 1.11 the entry point is Base's `_any`, so callable objects also stop early.
+    # On 1.10 only `f::Function` takes the chunked path.
+    if VERSION >= v"1.11-"
+        empty!(getindex_log(a))
+        @test any(Base.Fix2(>, 0), a) && getindex_count(a) == 1
+        @test any(IsPositive(), a) && getindex_count(a) == 2
+    end
+end
+struct IsPositive end
+(::IsPositive)(x) = x > 0
+
+@testset "Reductions reach the backend hooks" begin
+    test_reductions_reach_backend()
+end
+
+@testset "any/all short-circuit per chunk" begin
+    test_any_all_short_circuit()
+end
+
 # ── Backend test suites ─────────────────────────────────────────────────────
 
 @testset "Backend test suite: DefaultBackend specialized reductions" begin
