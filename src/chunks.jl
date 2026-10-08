@@ -8,8 +8,9 @@ are the implementations.
 """
 abstract type ChunkVector <: AbstractVector{UnitRange} end
 
-findchunk(a::ChunkVector, i::AbstractUnitRange) =
-    (findchunk(a, first(i))::Int):(findchunk(a, last(i))::Int)
+function findchunk(a::ChunkVector, i::AbstractUnitRange)
+    return (findchunk(a, first(i))::Int):(findchunk(a, last(i))::Int)
+end
 findchunk(a::ChunkVector, ::Colon) = 1:length(a)
 
 # Identify chunks from indices which may be discontinuous.
@@ -61,22 +62,28 @@ struct RegularChunks <: ChunkVector
     arraysize::Int
     function RegularChunks(chunksize::Integer, offset::Integer, arraysize::Integer)
         chunksize > 0 || throw(ArgumentError("Chunk sizes must be strictly positive"))
-        -1 < offset < chunksize || throw(ArgumentError("Offsets must be positive and smaller than the chunk size, got offset: $offset and chunk size: $chunksize"))
+        -1 < offset < chunksize || throw(
+            ArgumentError(
+                "Offsets must be positive and smaller than the chunk size, got offset: $offset and chunk size: $chunksize",
+            ),
+        )
         arraysize >= 0 || throw(ArgumentError("Negative axis lengths are not allowed"))
-        new(Int(chunksize), Int(offset), Int(arraysize))
+        return new(Int(chunksize), Int(offset), Int(arraysize))
     end
 end
 
 function Base.show(io::IO, chunks::RegularChunks)
     (; chunksize, offset, arraysize) = chunks
-    Base.print(io, "RegularChunks($chunksize, $offset, $arraysize)")
+    return Base.print(io, "RegularChunks($chunksize, $offset, $arraysize)")
 end
 
 # Base methods
 
 Base.@propagate_inbounds function Base.getindex(r::RegularChunks, i::Int)
     @boundscheck checkbounds(r, i)
-    return max((i - 1) * r.chunksize + 1 - r.offset, 1):min(i * r.chunksize - r.offset, r.arraysize)
+    return max((i - 1) * r.chunksize + 1 - r.offset, 1):min(
+        i * r.chunksize - r.offset, r.arraysize
+    )
 end
 Base.size(r::RegularChunks) = (div(r.arraysize + r.offset - 1, r.chunksize) + 1,)
 function Base.:(==)(r1::RegularChunks, r2::RegularChunks)
@@ -86,7 +93,7 @@ function Base.:(==)(r1::RegularChunks, r2::RegularChunks)
     nchunks = length(r1)
     nchunks == length(r2) || return false
     # But after that we need to take the number of chunks into account
-    if nchunks > 2 
+    if nchunks > 2
         # For longer RegularChunks the offsets and chunk sizes 
         # must match for the chunks to be the same. 
         # So we compare them directly rather than iterating all of the ranges
@@ -121,7 +128,8 @@ function subsetchunks(chunks::RegularChunks, subsets::AbstractRange)
         # In which cas the chunk size is divided by the step size
         newchunksize = chunks.chunksize ÷ abs(step(subsets))
         if step(subsets) > 0
-            newoffset = mod(first(subsets) - 1 + chunks.offset, chunks.chunksize) ÷ step(subsets)
+            newoffset =
+                mod(first(subsets) - 1 + chunks.offset, chunks.chunksize) ÷ step(subsets)
             return RegularChunks(newchunksize, newoffset, length(subsets))
         elseif step(subsets) < 0
             chunks2 = subsetchunks(chunks, last(subsets):first(subsets))::ChunkVector
@@ -133,8 +141,7 @@ function subsetchunks(chunks::RegularChunks, subsets::AbstractRange)
     end
 end
 
-findchunk(chunks::RegularChunks, i::Int) =
-    div(i + chunks.offset - 1, chunks.chunksize) + 1
+findchunk(chunks::RegularChunks, i::Int) = div(i + chunks.offset - 1, chunks.chunksize) + 1
 
 approx_chunksize(r::RegularChunks) = r.chunksize
 grid_offset(r::RegularChunks) = r.offset
@@ -150,7 +157,7 @@ struct IrregularChunks <: ChunkVector
     function IrregularChunks(offsets::Vector{Int})
         first(offsets) == 0 ||
             throw(ArgumentError("First Offset of an Irregularchunk must be 0"))
-        all(i -> offsets[i] < offsets[i+1], 1:(length(offsets)-1)) ||
+        all(i -> offsets[i] < offsets[i + 1], 1:(length(offsets) - 1)) ||
             throw(ArgumentError("Offsets of an Irregularchunk must be strictly ordered"))
         return new(offsets)
     end
@@ -168,14 +175,14 @@ end
 
 Base.@propagate_inbounds function Base.getindex(chunks::IrregularChunks, i::Int)
     @boundscheck checkbounds(chunks, i)
-    return (chunks.offsets[i]+1):chunks.offsets[i+1]
+    return (chunks.offsets[i] + 1):chunks.offsets[i + 1]
 end
-  
+
 Base.size(chunks::IrregularChunks) = (length(chunks.offsets) - 1,)
-Base.:(==)(c1::IrregularChunks, c2::IrregularChunks) =
-    c1 === c2 || c1.offsets == c2.offsets
-Base.show(io::IO, chunks::IrregularChunks) =
-    Base.print(io, "IrregularChunks($(chunks.offsets))")
+Base.:(==)(c1::IrregularChunks, c2::IrregularChunks) = c1 === c2 || c1.offsets == c2.offsets
+function Base.show(io::IO, chunks::IrregularChunks)
+    return Base.print(io, "IrregularChunks($(chunks.offsets))")
+end
 
 function subsetchunks(chunks::IrregularChunks, subsets::UnitRange)
     if isempty(subsets)
@@ -183,17 +190,17 @@ function subsetchunks(chunks::IrregularChunks, subsets::UnitRange)
     end
     c1 = findchunk(chunks, first(subsets))
     c2 = findchunk(chunks, last(subsets))
-    newoffsets = chunks.offsets[c1:(c2+1)]
+    newoffsets = chunks.offsets[c1:(c2 + 1)]
     firstoffset = first(subsets) - chunks.offsets[c1] - 1
     newoffsets[end] = last(subsets)
     newoffsets[2:end] .= newoffsets[2:end] .- firstoffset
     newoffsets .= newoffsets .- first(newoffsets)
     return IrregularChunks(newoffsets)
 end
-findchunk(chunks::IrregularChunks, i::Int) =
-    searchsortedfirst(chunks.offsets, i) - 1
-approx_chunksize(chunks::IrregularChunks) =
-    round(Int, sum(diff(chunks.offsets)) / (length(chunks.offsets) - 1))
+findchunk(chunks::IrregularChunks, i::Int) = searchsortedfirst(chunks.offsets, i) - 1
+function approx_chunksize(chunks::IrregularChunks)
+    return round(Int, sum(diff(chunks.offsets)) / (length(chunks.offsets) - 1))
+end
 grid_offset(chunks::IrregularChunks) = 0
 max_chunksize(chunks::IrregularChunks) = maximum(diff(chunks.offsets))
 
@@ -220,14 +227,16 @@ function Base.show(io::IO, gridchunks::GridChunks)
     map(gridchunks.chunks) do chunks
         println("    ")
         show(io, chunks)
-        print(",")
+        return print(",")
     end
-    println(io, ")")
+    return println(io, ")")
 end
 
 # Base methods
 
-Base.@propagate_inbounds function Base.getindex(gc::GridChunks{N}, i::Vararg{Int,N}) where {N}
+Base.@propagate_inbounds function Base.getindex(
+    gc::GridChunks{N}, i::Vararg{Int,N}
+) where {N}
     @boundscheck checkbounds(gc, i...)
     return map(getindex, gc.chunks, i)
 end
@@ -263,9 +272,9 @@ function chunktype_from_chunksizes(chunksizes::AbstractVector)
         # Two affected chunks
         chunksize = max(chunksizes[1], chunksizes[2])
         return RegularChunks(chunksize, chunksize - chunksizes[1], sum(chunksizes))
-    elseif all(==(chunksizes[2]), view(chunksizes, (2):(length(chunksizes)-1))) &&
-           chunksizes[end] <= chunksizes[2] &&
-           chunksizes[1] <= chunksizes[2]
+    elseif all(==(chunksizes[2]), view(chunksizes, (2):(length(chunksizes) - 1))) &&
+        chunksizes[end] <= chunksizes[2] &&
+        chunksizes[1] <= chunksizes[2]
         # All chunks have the same size, only first and last chunk can be shorter
         chunksize = chunksizes[2]
         return RegularChunks(chunksize, chunksize - chunksizes[1], sum(chunksizes))
@@ -329,7 +338,6 @@ size like strings. Defaults to 100MB
 """
 const fallback_element_size = Ref(100)
 
-
 """
     ChunkedTrait{S}
 
@@ -364,7 +372,6 @@ struct Unchunked{BS} <: ChunkedTrait{BS}
 end
 Unchunked() = Unchunked(SubRanges())
 
-
 """
    ChunkIndexType
 
@@ -393,8 +400,9 @@ struct ChunkIndex{N,O<:ChunkIndexType}
     I::CartesianIndex{N}
     chunktype::O
 end
-ChunkIndex(i::CartesianIndex; offset=false) =
-    ChunkIndex(i, offset ? OffsetChunks() : OneBasedChunks())
+function ChunkIndex(i::CartesianIndex; offset=false)
+    return ChunkIndex(i, offset ? OffsetChunks() : OneBasedChunks())
+end
 ChunkIndex(i::Integer...; kw...) = ChunkIndex(CartesianIndex(i); kw...)
 
 "Removes the offset from a ChunkIndex"
@@ -411,8 +419,9 @@ struct ChunkIndices{N,RT<:Tuple{Vararg{Any,N}},O} <: AbstractArray{ChunkIndex{N}
 end
 
 Base.size(i::ChunkIndices) = length.(i.I)
-Base.getindex(A::ChunkIndices{N}, I::Vararg{Int,N}) where {N} =
-    ChunkIndex(CartesianIndex(getindex.(A.I, I)), A.chunktype)
+function Base.getindex(A::ChunkIndices{N}, I::Vararg{Int,N}) where {N}
+    return ChunkIndex(CartesianIndex(getindex.(A.I, I)), A.chunktype)
+end
 Base.eltype(::Type{<:ChunkIndices{N,<:Any,O}}) where {N,O} = ChunkIndex{N,O}
 
 """
@@ -453,7 +462,7 @@ function estimate_chunksize(size::Tuple, elsize)
         elseif idim > ii
             1
         else
-            sizebefore = idim == 1 ? 1 : cp[idim-1]
+            sizebefore = idim == 1 ? 1 : cp[idim - 1]
             floor(Int, maxelems / sizebefore)
         end
     end

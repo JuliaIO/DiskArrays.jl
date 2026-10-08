@@ -13,8 +13,12 @@ struct RangeIndex <: AbstractVector{Int}
     ranges::Vector{UnitRange{Int}}
     stops::Vector{Int} # cumulative lengths, for `O(log n)` `getindex`
     function RangeIndex(ranges::Vector{UnitRange{Int}})
-        all(!isempty, ranges) && all(k -> last(ranges[k]) < first(ranges[k+1]), 1:length(ranges)-1) ||
-            throw(ArgumentError("ranges must be non-empty, sorted and non-overlapping, got $ranges"))
+        all(!isempty, ranges) &&
+        all(k -> last(ranges[k]) < first(ranges[k + 1]), 1:(length(ranges) - 1)) || throw(
+            ArgumentError(
+                "ranges must be non-empty, sorted and non-overlapping, got $ranges"
+            ),
+        )
         return new(ranges, cumsum(map(length, ranges)))
     end
 end
@@ -43,12 +47,17 @@ Base.maximum(i::RangeIndex) = last(last(i.ranges))
 Base.extrema(i::RangeIndex) = (minimum(i), maximum(i))
 Base.show(io::IO, i::RangeIndex) = print(io, "RangeIndex(", join(i.ranges, ", "), ")")
 Base.show(io::IO, ::MIME"text/plain", i::RangeIndex) = show(io, i)
-Base.checkindex(::Type{Bool}, inds::AbstractUnitRange, i::RangeIndex) =
-    isempty(i.ranges) || (first(i.ranges[1]) >= first(inds) && last(i.ranges[end]) <= last(inds))
+function Base.checkindex(::Type{Bool}, inds::AbstractUnitRange, i::RangeIndex)
+    return isempty(i.ranges) ||
+           (first(i.ranges[1]) >= first(inds) && last(i.ranges[end]) <= last(inds))
+end
 # In-memory arrays and ranges (temp buffers, lookups) index fastest with a plain `Vector{Int}`,
 # so resolve to one there. Disk arrays and wrappers never see this and keep the `RangeIndex`.
-Base.to_indices(A::Union{DenseArray,AbstractRange}, inds, I::Tuple{RangeIndex,Vararg}) =
-    (collect(I[1]), to_indices(A, Base.safe_tail(inds), tail(I))...)
+function Base.to_indices(
+    A::Union{DenseArray,AbstractRange}, inds, I::Tuple{RangeIndex,Vararg}
+)
+    return (collect(I[1]), to_indices(A, Base.safe_tail(inds), tail(I))...)
+end
 
 # Batched exactly when the same indices as a vector would be (`_need_batch_index`); dense
 # enough for the strategy's `density_threshold`, the hull is read in one block. Batched, the
@@ -57,10 +66,17 @@ for S in (:ChunkRead, :SubRanges) # one method per strategy, to beat the `Abstra
     @eval function process_index(i::RangeIndex, chunks::Tuple{Vararg{ChunkVector}}, s::$S)
         groups = group_ranges(i.ranges, first(chunks), s)
         datainds = map(g -> (first(i.ranges[first(g)]):last(i.ranges[last(g)]),), groups)
-        outinds = map(g -> (i.stops[first(g)]-length(i.ranges[first(g)])+1:i.stops[last(g)],), groups)
+        outinds = map(
+            g -> ((i.stops[first(g)] - length(i.ranges[first(g)]) + 1):i.stops[last(g)],),
+            groups,
+        )
         # Within a block the temp array is read contiguously, or through the shifted ranges if there are gaps
         tempinds = map(groups, datainds, outinds) do g, d, o
-            length(d[1]) == length(o[1]) ? (1:length(o[1]),) : (RangeIndex(map(r -> r .- (first(d[1]) - 1), i.ranges[g])),)
+            if length(d[1]) == length(o[1])
+                (1:length(o[1]),)
+            else
+                (RangeIndex(map(r -> r .- (first(d[1]) - 1), i.ranges[g])),)
+            end
         end
         tempsize = maximum(d -> length(d[1]), datainds; init=0)
         di = DiskIndex((length(i),), (tempsize,), (outinds,), (tempinds,), (datainds,))
@@ -79,7 +95,7 @@ so every other range is read on its own.
 function group_ranges(ranges, chunks::ChunkVector, strategy::BatchStrategy)
     groups = UnitRange{Int}[]
     for k in eachindex(ranges)
-        if k > 1 && joins(ranges[k-1], ranges[k], chunks, strategy)
+        if k > 1 && joins(ranges[k - 1], ranges[k], chunks, strategy)
             groups[end] = first(groups[end]):k
         else
             push!(groups, k:k)
@@ -87,5 +103,8 @@ function group_ranges(ranges, chunks::ChunkVector, strategy::BatchStrategy)
     end
     return groups
 end
-joins(a, b, chunks, ::ChunkRead) = last(a) + 1 == first(b) || findchunk(chunks, last(a)) == findchunk(chunks, first(b))
+function joins(a, b, chunks, ::ChunkRead)
+    return last(a) + 1 == first(b) ||
+           findchunk(chunks, last(a)) == findchunk(chunks, first(b))
+end
 joins(a, b, chunks, ::SubRanges) = last(a) + 1 == first(b)
