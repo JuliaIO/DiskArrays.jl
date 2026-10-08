@@ -1,114 +1,71 @@
-using OffsetArrays: OffsetArray
-
 """
-    BlockedIndices{C<:GridChunks}
+    IterBlocks{N}
 
-A lazy iterator over the indices of GridChunks.
+The blocks that iteration reads a disk array in: whole dimensions before `k`, chunk ranges
+along `k`, single indices after it. Each block is contiguous in column-major order, so
+iterating its values in turn yields the array in Base's iteration order, which consumers
+like `zip`, generators and `enumerate` rely on.
 
-Uses two `Iterators.Stateful` iterators, at chunk and indices levels.
+`k` is the last dimension whose blocks fit in `default_chunk_size` megabytes. When that is
+`N`, every chunk is read once; a smaller `k` bounds memory by re-reading the chunks that span
+several indices after `k`.
 """
-struct BlockedIndices{C<:GridChunks}
-    gridchunks::C
+struct IterBlocks{N}
+    size::NTuple{N,Int}
+    k::Int
+    kranges::Vector{UnitRange{Int}}
+    grid::CartesianIndices{N,NTuple{N,Base.OneTo{Int}}}
 end
 
-# Base methods
-
-Base.length(b::BlockedIndices) = prod(last.(last.(b.gridchunks.chunks)))
-Base.IteratorEltype(::Type{<:BlockedIndices}) = Base.HasEltype()
-Base.IteratorSize(::Type{<:BlockedIndices{<:GridChunks{N}}}) where {N} = Base.HasShape{N}()
-Base.size(b::BlockedIndices)::NTuple{<:Any,Int} = map(last ∘ last, b.gridchunks.chunks)
-Base.eltype(b::BlockedIndices) = CartesianIndex{ndims(b.gridchunks)}
-
-function Base.iterate(a::BlockedIndices)
-    # Define an outer iterator over chunks
-    chunkstate = Iterators.Stateful(a.gridchunks)
-    # And iterate it once
-    ic = iterate(chunkstate)
-    # Exit early if there are no chunks at all
-    isnothing(ic) && return nothing
-    # Define an inner iterator over chunk indices
-    innerstate = Iterators.Stateful(CartesianIndices(first(ic)))
-    # Iterate it once
-    i = iterate(innerstate)
-    # Again exit if its empty
-    isnothing(i) && return nothing
-    # Otherwise return the first index and both iterators
-    state = (chunkstate, innerstate)
-    return first(i), state
+function IterBlocks(a::AbstractArray{<:Any,N}) where {N}
+    chunks = eachchunk(a).chunks
+    sz = size(a)
+    limit = default_chunk_size[] * 1_000_000 / element_size(a)
+    k, before = 1, 1
+    for d in 1:N
+        before * max_chunksize(chunks[d]) <= limit || break
+        k = d
+        before *= sz[d]
+    end
+    kranges = collect(UnitRange{Int}, chunks[k])
+    # A fresh binding: capturing the loop-assigned `k` would box it
+    grid = let k = k
+        CartesianIndices(ntuple(d -> d < k ? 1 : d == k ? length(kranges) : sz[d], Val(N)))
+    end
+    return IterBlocks{N}(sz, k, kranges, grid)
 end
-function Base.iterate(::BlockedIndices, state)
-    chunkstate, innerstate = state
-    i = iterate(innerstate)
-    if isnothing(i)
-        c = iterate(chunkstate)
-        # There are no more chunks, exit
-        isnothing(c) && return nothing
-        # Set the inner iterator to the start of the next chunk
-        Iterators.reset!(innerstate, CartesianIndices(first(c)))
-        i = iterate(innerstate)
-        # This chunk is empty, exit
-        isnothing(i) && return nothing
-        # Return the next index and iterator state
-        state = (chunkstate, innerstate)
-        return first(i), state
-    else
-        # Return the next index and iterator state
-        state = (chunkstate, innerstate)
-        return first(i), state
+
+function _block(b::IterBlocks{N}, I::CartesianIndex{N}) where {N}
+    return ntuple(Val(N)) do d
+        d < b.k ? (1:b.size[d]) : d == b.k ? b.kranges[I[d]] : (I[d]:I[d])
     end
 end
 
-# Implementaion macros
+_readblock(a::AbstractArray{T,N}, inds) where {T,N} = vec(convert(Array{T,N}, a[inds...]))
 
-# Nested iteration over chunks
-@noinline function _iterate_disk(a::AbstractArray{T}, i::I) where {T, I}
-    # Split the data, block indices and state from the iterator
-    currentdata, blockinds, state = i
-    # And split the block stat into the chunk iterator and inner indices
-    (chunkstate, innerstate) = state
-    # Need to check now as state will be updated
-    innerstate_was_empty = isempty(innerstate)
-    # Iterate over the block indices
-    blockiter = iterate(blockinds, state)
-    # Check if we reached the end
-    if isnothing(blockiter)
-        return nothing
-    else
-        # Get the next index and updated iterator state
-        i, newstate = blockiter
-        if innerstate_was_empty
-            # We need to move to a new chunk
-            (newchunkstate, newinnerstate) = newstate
-            newchunk = newinnerstate.itr.indices
-            # Get a new chunk of data
-            newdata = OffsetArray(a[newchunk...], newinnerstate.itr)
-            return newdata[i]::T, (newdata, blockinds, newstate)
-        else
-            # Current chunk still has values left to iterate over
-            return currentdata[i]::T, (currentdata, blockinds, newstate)
-        end
-    end
+# State: the blocks, the values of the current block, the position in it and the grid state.
+function _iterate_disk(a::AbstractArray)
+    # A zero-length dimension still has one, empty, chunk
+    isempty(a) && return nothing
+    blocks = IterBlocks(a)
+    return _iterate_block(a, blocks, iterate(blocks.grid))
+end
+function _iterate_disk(a::AbstractArray, (blocks, values, i, gridstate))
+    i < length(values) && return values[i+1], (blocks, values, i + 1, gridstate)
+    return _iterate_block(a, blocks, iterate(blocks.grid, gridstate))
 end
 _iterate_disk(a::AbstractArray{<:Any,0}, i=1) = i == 1 ? (@inbounds a[i], 2) : nothing
 
-@noinline function _iterate_disk(a)
-    # Get the indices for each chunk of data
-    blockinds = BlockedIndices(eachchunk(a))
-    iterator = iterate(blockinds)
-    # No chunks at all, early exit
-    isnothing(iterator) && return nothing
-    i, state = iterator
-    (chunkstate, innerstate) = state
-    currentchunk = innerstate.itr.indices
-    # Get the first chunk of data to iterate over
-    currentdata = OffsetArray(a[currentchunk...], innerstate.itr)
-    return currentdata[i], (currentdata, blockinds, state)
+function _iterate_block(a::AbstractArray, blocks::IterBlocks, g)
+    isnothing(g) && return nothing
+    I, gridstate = g
+    values = _readblock(a, _block(blocks, I))
+    return first(values), (blocks, values, 1, gridstate)
 end
 
 macro implement_iteration(t)
     t = esc(t)
     quote
-        Base.eachindex(a::$t) = BlockedIndices(eachchunk(a))
         Base.iterate(a::$t) = _iterate_disk(a)
         Base.iterate(a::$t, i) = _iterate_disk(a, i)
     end

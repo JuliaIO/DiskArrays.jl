@@ -9,6 +9,8 @@ using TraceFuns, Suppressor
 
 include("chunkexists.jl")
 
+elements_read(a) = sum(r -> prod(length, r), getindex_log(a); init=0)
+
 # Run with any code changes
 # using JET
 # JET.report_package(DiskArrays)
@@ -511,27 +513,13 @@ end
     b = rand(10, 9, 2)
     da = AccessCountDiskArray(a; chunksize=(5, 3, 2))
     db = AccessCountDiskArray(b; chunksize=(2, 3, 1))
-    z = zip(a, b)
-    zd = zip(da, db)
-    zdc = collect(zd)
-    zc = collect(z)
-    @test getindex_count(da) == 6
-    @test getindex_count(db) == 6
-    @test all(zd .== z)
-    @test all(zdc .== zc)
-    @test zip(a, da, a) isa DiskArrays.DiskZip
-    @test zip(da, da, a) isa DiskArrays.DiskZip
-    @test zip(da, da, da) isa DiskArrays.DiskZip
-    @test zip(a, da, da) isa DiskArrays.DiskZip
-    # Should we add moree dispatch to fix this?
-    @test_broken zip(a, a, da) isa DiskArrays.DiskZip
-    zd3_a = zip(a, da, a)
-    zd3_b = zip(da, da, a)
-    zd3_c = zip(da, a, a)
-    za3 = zip(a, a, a)
-    @test collect(zd3_a) == collect(zd3_b) == collect(zd3_c) == collect(za3)
-    @test all(zd3_a .== zd3_b .== zd3_c .== za3)
-    @test_throws DimensionMismatch zip(da, rand(2, 3, 1))
+    @test collect(zip(da, db)) == collect(zip(a, b))
+    # Each array is read once, whatever the chunks of the other
+    @test elements_read(da) == length(a)
+    @test elements_read(db) == length(b)
+    @test collect(zip(a, da, db)) == collect(zip(a, a, b))
+    @test collect(zip(da, 1:length(a))) == collect(zip(a, 1:length(a)))
+    @test_throws DimensionMismatch collect(zip(da, rand(2, 3, 1)))
 end
 
 @testset "cat" begin
@@ -1029,27 +1017,37 @@ end
     a = collect(reshape(1:90, 10, 9))
     a_disk = AccessCountDiskArray(a; chunksize=(5, 3))
     @test [aa for aa in a_disk] == a
-    #The array has 6 chunks so getindex_count should be 6
-    @test getindex_count(a_disk) == 6
-    # Filtered generators dont work yet
-    @test_broken [aa for aa in a_disk if aa > 40] == [aa for aa in a if aa > 40]
-    #Iterator interface tests
-    g = Base.Generator(identity, a_disk)
-    @test g isa DiskArrays.DiskGenerator
-    @test size(g) == (10, 9)
-    @test !isempty(g)
-    @test length(g) == 90
-    @test ndims(g) == 2
-    @test keys(g) == CartesianIndices((10, 9))
+    @test elements_read(a_disk) == length(a)
+    @test [aa for aa in a_disk if aa > 40] == [aa for aa in a if aa > 40]
+end
+
+@testset "iteration follows column-major order" begin
+    a = collect(reshape(1:90, 10, 9))
+    for chunksize in ((5, 3), (3, 4), (10, 1), (1, 9))
+        d = ChunkedDiskArray(a; chunksize)
+        @test collect(Iterators.take(d, 13)) == a[1:13]
+        @test first(Iterators.drop(d, 12)) == a[13]
+        @test [i for (i, x) in enumerate(d) if x == 13] == [13]
+        @test foldl((acc, x) -> push!(acc, x), d; init=Int[]) == vec(a)
+        @test accumulate(+, d) == accumulate(+, a)
+    end
+    @testset "blocks shrink to fit default_chunk_size" begin
+        a3 = rand(10, 9, 4)
+        d = AccessCountDiskArray(a3; chunksize=(5, 3, 2))
+        default_size = DiskArrays.default_chunk_size[]
+        DiskArrays.default_chunk_size[] = 0
+        try
+            @test [x for x in d] == a3
+        finally
+            DiskArrays.default_chunk_size[] = default_size
+        end
+        @test maximum(r -> prod(length, r), getindex_log(d)) == 5
+    end
 end
 
 @testset "Array methods" begin
     a = collect(reshape(1:90, 10, 9))
     a_disk = AccessCountDiskArray(a; chunksize=(5, 3))
-    ei = eachindex(a_disk)
-    @test ei isa DiskArrays.BlockedIndices
-    @test length(ei) == 90
-    @test eltype(ei) == CartesianIndex{2}
     @test collect(a_disk) == a
     @test Array(a_disk) == a
     @testset "copyto" begin
@@ -1243,6 +1241,36 @@ struct TestArray{T,N} <: AbstractArray{T,N} end
 
 end
 
+# A disk array implemented with the macros, as by packages whose types are not `AbstractDiskArray`s
+struct MacroDiskArray{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
+    parent::A
+    chunksize::NTuple{N,Int}
+end
+Base.size(a::MacroDiskArray) = size(a.parent)
+DiskArrays.haschunks(::MacroDiskArray) = DiskArrays.Chunked()
+DiskArrays.eachchunk(a::MacroDiskArray) = DiskArrays.GridChunks(a, a.chunksize)
+DiskArrays.readblock!(a::MacroDiskArray, aout, i::AbstractUnitRange...) = aout .= a.parent[i...]
+DiskArrays.writeblock!(a::MacroDiskArray, v, i::AbstractUnitRange...) = view(a.parent, i...) .= v
+
+@testset "Deprecated zip and generator macros" begin
+    for m in (:var"@implement_zip", :var"@implement_generator", :var"@implement_diskarray_skip_zip")
+        ex = Expr(:macrocall, Expr(:., :DiskArrays, QuoteNode(m)), LineNumberNode(@__LINE__), :MacroDiskArray)
+        @test_deprecated macroexpand(@__MODULE__, ex)
+    end
+    Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
+        @eval DiskArrays.@implement_diskarray_skip_zip MacroDiskArray
+        @eval DiskArrays.@implement_zip MacroDiskArray
+        @eval DiskArrays.@implement_generator MacroDiskArray
+    end
+    a = reshape(1:60, 6, 10)
+    d = MacroDiskArray(collect(a), (4, 3))
+    @test DiskArrays.isdisk(d)
+    @test [x for x in d] == a
+    @test collect(zip(d, a)) == collect(zip(a, a))
+    @test map(x -> 2x, d) == 2a
+    @test d[2:3, 4] == a[2:3, 4]
+end
+
 # issue #123
 
 mutable struct ResizableArray{T,N} <: AbstractArray{T,N}
@@ -1395,8 +1423,7 @@ end
 
 @testset "Map over indices correctly" begin
     # This is a regression test for issue #144
-    # `map` should always work over the correct indices,
-    # especially since we overload generators to `DiskArrayGenerator`.
+    # `map` should always work over the correct indices.
 
     data = [i + j for i in 1:200, j in 1:100]
     da = AccessCountDiskArray(data, chunksize=(10, 10))
@@ -1412,7 +1439,7 @@ end
     a = ChunkedDiskArray(1:10 .> 3; chunksize=(3,))
     for fname in [:sum, :prod, :all, :any, :minimum, :maximum, :count]
         @eval out = @capture_out @trace $fname($a) DiskArrays
-        @test occursin("DiskGenerator", out) == false
+        @test occursin("_iterate_disk", out) == false
     end
     @test count(a) + count(!, a) == length(a)
 end
