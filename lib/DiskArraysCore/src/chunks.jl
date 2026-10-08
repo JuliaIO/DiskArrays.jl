@@ -377,8 +377,6 @@ abstract type ChunkIndexType end
 struct OffsetChunks <: ChunkIndexType end
 struct OneBasedChunks <: ChunkIndexType end
 
-wrapchunk(x, inds) = OffsetArray(x, inds...)
-
 """
     ChunkIndex{N}
 
@@ -405,7 +403,8 @@ nooffset(i::ChunkIndex) = ChunkIndex(i.I, OneBasedChunks())
 
 Represents an iterator of `ChunkIndex` objects.
 """
-struct ChunkIndices{N,RT<:Tuple{Vararg{Any,N}},O} <: AbstractArray{ChunkIndex{N},N}
+struct ChunkIndices{N,RT<:Tuple{Vararg{Any,N}},O<:ChunkIndexType} <:
+       AbstractArray{ChunkIndex{N,O},N}
     I::RT
     chunktype::O
 end
@@ -413,7 +412,6 @@ end
 Base.size(i::ChunkIndices) = length.(i.I)
 Base.getindex(A::ChunkIndices{N}, I::Vararg{Int,N}) where {N} =
     ChunkIndex(CartesianIndex(getindex.(A.I, I)), A.chunktype)
-Base.eltype(::Type{<:ChunkIndices{N,<:Any,O}}) where {N,O} = ChunkIndex{N,O}
 
 """
     element_size(a::AbstractArray)

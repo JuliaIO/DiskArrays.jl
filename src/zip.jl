@@ -62,8 +62,6 @@ function Base.collect(dz::DiskZip)
     return out
 end
 
-_zip_error() = throw(ArgumentError("Cannot `zip` a disk array with an iterator"))
-
 function Base.zip(A1::AbstractDiskArray, A2::AbstractDiskArray, As::AbstractArray...)
     return DiskZip(A1, A2, As...)
 end
@@ -73,10 +71,6 @@ end
 function Base.zip(A1::AbstractArray, A2::AbstractDiskArray, As::AbstractArray...)
     return DiskZip(A1, A2, As...)
 end
-
-Base.zip(::AbstractDiskArray, x, xs...) = _zip_error()
-Base.zip(x, ::AbstractDiskArray, xs...) = _zip_error()
-Base.zip(x::AbstractDiskArray, ::AbstractDiskArray, xs...) = _zip_error()
 
 macro implement_zip(t)
     t = esc(t)
@@ -91,9 +85,5 @@ macro implement_zip(t)
         function Base.zip(A1::$t, A2::AbstractDiskArray, As::AbstractArray...)
             return $DiskZip(A1, A2, As...)
         end
-
-        Base.zip(::$t, x, xs...) = $_zip_error()
-        Base.zip(x, ::$t, xs...) = $_zip_error()
-        Base.zip(::$t, ::$t, xs...) = $_zip_error()
     end
 end
