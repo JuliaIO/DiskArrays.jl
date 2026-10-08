@@ -1575,8 +1575,20 @@ end
     r = DiskArrays.RangeIndex(1:2, 6:8)
     @test collect(r) == [1, 2, 6, 7, 8]
     @test extrema(r) == (1, 8)
-    @test to_indices(zeros(8, 8), (r, 2)) == ([1, 2, 6, 7, 8], 2) && to_indices(1:8, (r,))[1] isa Vector{Int}
+    @test to_indices(zeros(8, 8), (r, 2)) == ([1, 2, 6, 7, 8], 2)
     @test to_indices(view(zeros(8), :), (r,))[1] isa DiskArrays.RangeIndex
+    # Base arrays and ranges indexed with a RangeIndex behave as with the same `Vector{Int}`
+    v8, m8 = collect(11:18), reshape(collect(1:64), 8, 8)
+    @test v8[r] == [11, 12, 16, 17, 18] && v8[r] isa Vector{Int}
+    @test m8[r, 2] == m8[collect(r), 2] && m8[r, r] == m8[collect(r), collect(r)]
+    @test (1:8)[r] == [1, 2, 6, 7, 8] && (11:18)[r] == [11, 12, 16, 17, 18]
+    @test view(v8, r) == v8[collect(r)] && sum(view(m8, r, 2)) == sum(m8[collect(r), 2])
+    v8[r] .= 0
+    @test v8 == [0, 0, 13, 14, 15, 0, 0, 0]
+    # DiskArrays' own temp-array indices for a block with gaps are a plain `Vector{Int}`
+    di, _ = DiskArrays.process_index(r, (DiskArrays.RegularChunks(8, 0, 8),), DiskArrays.ChunkRead(density_threshold=1.0))
+    @test only(only(di.temparray_indices)) == ([1, 2, 6, 7, 8],)
+    @test only(only(di.temparray_indices))[1] isa Vector{Int}
     @test checkbounds(Bool, zeros(8), r) && !checkbounds(Bool, zeros(7), r)
     @test r[2:4] == DiskArrays.RangeIndex(2:2, 6:7) && r[2:4] isa DiskArrays.RangeIndex
     @test r[3:3] == DiskArrays.RangeIndex(6:6) && isempty(r[2:1])

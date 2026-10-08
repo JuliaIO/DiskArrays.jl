@@ -45,10 +45,6 @@ Base.show(io::IO, i::RangeIndex) = print(io, "RangeIndex(", join(i.ranges, ", ")
 Base.show(io::IO, ::MIME"text/plain", i::RangeIndex) = show(io, i)
 Base.checkindex(::Type{Bool}, inds::AbstractUnitRange, i::RangeIndex) =
     isempty(i.ranges) || (first(i.ranges[1]) >= first(inds) && last(i.ranges[end]) <= last(inds))
-# In-memory arrays and ranges (temp buffers, lookups) index fastest with a plain `Vector{Int}`,
-# so resolve to one there. Disk arrays and wrappers never see this and keep the `RangeIndex`.
-Base.to_indices(A::Union{DenseArray,AbstractRange}, inds, I::Tuple{RangeIndex,Vararg}) =
-    (collect(I[1]), to_indices(A, Base.safe_tail(inds), tail(I))...)
 
 # Batched exactly when the same indices as a vector would be (`_need_batch_index`); dense
 # enough for the strategy's `density_threshold`, the hull is read in one block. Batched, the
@@ -58,14 +54,25 @@ for S in (:ChunkRead, :SubRanges) # one method per strategy, to beat the `Abstra
         groups = group_ranges(i.ranges, first(chunks), s)
         datainds = map(g -> (first(i.ranges[first(g)]):last(i.ranges[last(g)]),), groups)
         outinds = map(g -> (i.stops[first(g)]-length(i.ranges[first(g)])+1:i.stops[last(g)],), groups)
-        # Within a block the temp array is read contiguously, or through the shifted ranges if there are gaps
+        # Within a block the temp array is read contiguously, or through the shifted ranges if there
+        # are gaps. The temp array is an `Array`, which indexes fastest with a plain `Vector{Int}`
         tempinds = map(groups, datainds, outinds) do g, d, o
-            length(d[1]) == length(o[1]) ? (1:length(o[1]),) : (RangeIndex(map(r -> r .- (first(d[1]) - 1), i.ranges[g])),)
+            length(d[1]) == length(o[1]) ? (1:length(o[1]),) : (shifted_indices(view(i.ranges, g), first(d[1]) - 1),)
         end
         tempsize = maximum(d -> length(d[1]), datainds; init=0)
         di = DiskIndex((length(i),), (tempsize,), (outinds,), (tempinds,), (datainds,))
         return di, tail(chunks)
     end
+end
+
+# The elements of `ranges`, each minus `offset`, as one `Vector{Int}`
+function shifted_indices(ranges, offset::Int)
+    out = Vector{Int}(undef, sum(length, ranges; init=0))
+    k = 0
+    for r in ranges, x in r
+        out[k+=1] = x - offset
+    end
+    return out
 end
 
 """
