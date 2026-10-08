@@ -1,4 +1,5 @@
 using DiskArrays
+using DiskArraysCore
 using DiskArrays: ReshapedDiskArray, PermutedDiskArray, DiskIndex
 using DiskArrays.TestTypes
 using Test
@@ -20,6 +21,14 @@ include("chunkexists.jl")
     Aqua.test_undefined_exports(DiskArrays)
     Aqua.test_project_extras(DiskArrays)
     Aqua.test_deps_compat(DiskArrays)
+end
+
+@testset "DiskArraysCore" begin
+    # DiskArrays re-exports the interface from DiskArraysCore, they are the same objects
+    @test DiskArrays.AbstractDiskArray === DiskArraysCore.AbstractDiskArray
+    @test DiskArrays.GridChunks === DiskArraysCore.GridChunks
+    @test DiskArrays.readblock! === DiskArraysCore.readblock!
+    @test DiskArrays.eachchunk === DiskArraysCore.eachchunk
 end
 
 @testset "allowscalar" begin

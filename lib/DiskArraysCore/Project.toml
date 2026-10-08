@@ -1,0 +1,13 @@
+name = "DiskArraysCore"
+uuid = "d4b3b5a5-3a4e-4a1e-8c5b-6f0d9a2f7c11"
+authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
+version = "0.1.0"
+
+[compat]
+julia = "1.9"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

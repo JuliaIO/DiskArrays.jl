@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning].
   - `zip` of a disk array with a non-array iterator no longer throws an `ArgumentError`,
     and falls back to `Base.zip`.
   - `ChunkIndices` has the correct `eltype` from its supertype, so the `eltype` method is removed.
+- The `AbstractDiskArray` interface (`readblock!`, `writeblock!`, `eachchunk`, `haschunks`,
+  `chunkexists`), the chunk types (`GridChunks`, `RegularChunks`, `Chunked`, `ChunkIndex`, ...) and
+  the `BatchStrategy` types moved to the new dependency-free subpackage `DiskArraysCore`
+  (`lib/DiskArraysCore`). DiskArrays re-exports them: `DiskArrays.AbstractDiskArray === DiskArraysCore.AbstractDiskArray`
+  and nothing changes for users. Packages that only want to subtype `AbstractDiskArray`
+  can depend on DiskArraysCore and so avoid loading DiskArrays' generic array methods.
 
 ## v0.4.25
 

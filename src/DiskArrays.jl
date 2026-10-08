@@ -7,6 +7,19 @@ using LRUCache: LRUCache, LRU
 
 using Base: tail
 
+# The interface (`AbstractDiskArray`, `readblock!`, ...) and the chunk types live in
+# DiskArraysCore, which has no dependencies and does not invalidate any compiled code.
+# DiskArrays adds the generic implementations of the array methods.
+using DiskArraysCore: DiskArraysCore
+import DiskArraysCore:
+    AbstractDiskArray, AllowStepRange, BatchStrategy, CanStepRange, ChunkRead, NoBatch,
+    NoStepRange, SubRanges, ChunkIndex, ChunkIndexType, ChunkIndices, ChunkVector, Chunked,
+    ChunkedTrait, GridChunks, IrregularChunks, OffsetChunks, OneBasedChunks, RegularChunks,
+    Unchunked, approx_chunksize, arraysize_from_chunksize, batchstrategy, chunk_runlength,
+    chunkexists, chunktype_from_chunksizes, default_chunk_size, eachchunk, element_size,
+    estimate_chunksize, fallback_element_size, findchunk, grid_offset, haschunks, isdisk,
+    max_chunksize, nooffset, readblock!, subsetchunks, subsetchunks_fallback, writeblock!
+
 # Use the README as the module docs
 @doc let
     path = joinpath(dirname(@__DIR__), "README.md")
@@ -14,11 +27,14 @@ using Base: tail
     read(path, String)
 end DiskArrays
 
+using OffsetArrays: OffsetArray
+
+# Used by `OffsetChunks` indices to return a chunk with its position in the array
+wrapchunk(x, inds) = OffsetArray(x, inds...)
+
 export AbstractDiskArray, eachchunk, chunkexists, ChunkIndex, ChunkIndices, MissingTile
 
 include("scalar.jl")
-include("chunks.jl")
-include("diskarray.jl")
 include("batchgetindex.jl")
 include("diskindex.jl")
 include("indexing.jl")

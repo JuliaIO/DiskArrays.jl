@@ -377,8 +377,6 @@ abstract type ChunkIndexType end
 struct OffsetChunks <: ChunkIndexType end
 struct OneBasedChunks <: ChunkIndexType end
 
-wrapchunk(x, inds) = OffsetArray(x, inds...)
-
 """
     ChunkIndex{N}
 
