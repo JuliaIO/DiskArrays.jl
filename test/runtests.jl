@@ -729,6 +729,17 @@ end
     @test DiskArrays.output_aliasing(di, 3, 3) == :identical
 end
 
+@testset "transfer_results with integer indices" begin
+    values = [1 2; 3 4]
+    temparray = zeros(Int, 3, 3)
+    @test DiskArrays.transfer_results_write!(values, temparray, (2, 1), (3, 2)) === temparray
+    @test temparray[3, 2] == 3
+    @test count(!iszero, temparray) == 1
+    out = zeros(Int, 2, 2)
+    @test DiskArrays.transfer_results_read!(out, temparray, (1, 2), (3, 2)) === out
+    @test out[1, 2] == 3
+end
+
 
 @testset "Getindex/Setindex with vectors" begin
     a = AccessCountDiskArray(reshape(1:20, 4, 5, 1); chunksize=(4, 1, 1))
@@ -992,6 +1003,13 @@ end
             @test x[6] == a_vec[3]
             @test x[7] == a_vec[4]
             @test getindex_count(a_disk) == 1
+        end
+        # A different element type takes the method for any `PermutedDimsArray`
+        for T in (Int, Float64)
+            local x = PermutedDimsArray(zeros(T, 9, 10), (2, 1))
+            @test copyto!(x, a_disk) === x
+            @test x == a
+            @test parent(x) == permutedims(a)
         end
     end
 
@@ -1447,6 +1465,14 @@ end
     @test a1d[16:20] == tiles1d[4]
 end
 
+@testset "MultiReadArray" begin
+    m = DiskArrays.MultiReadArray(([(1, 2), (3, 4)], [(5,), (6,), (7,)]))
+    @test size(m) == (2, 3)
+    @test eachindex(m) == CartesianIndices((2, 3))
+    @test m[2, 3] == (3, 4, 7)
+    @test [m[i] for i in eachindex(m)] == [(i..., j...) for i in [(1, 2), (3, 4)], j in [(5,), (6,), (7,)]]
+end
+
 @testset "ChunkIndex" begin
     data = reshape(1:20, 4, 5)
     a = AccessCountDiskArray(data, chunksize=(2, 2))
@@ -1469,6 +1495,9 @@ end
     chunkinds_offset = ChunkIndices(a, offset=true)
     @test size(chunkinds_offset) == (2, 3)
     @test eltype(chunkinds_offset) == ChunkIndex{2,DiskArrays.OffsetChunks}
+    # The supertype carries the concrete element type
+    @test chunkinds isa AbstractArray{ChunkIndex{2,DiskArrays.OneBasedChunks},2}
+    @test eltype(collect(chunkinds_offset)) == ChunkIndex{2,DiskArrays.OffsetChunks}
     @test chunkinds_offset[1, 1] == ChunkIndex(1, 1, offset=true)
 end
 
