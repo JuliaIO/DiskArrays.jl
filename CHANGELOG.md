@@ -10,8 +10,11 @@ and this project adheres to [Semantic Versioning].
 ### Changed
 
 - Iteration yields values in the column-major order of Base arrays, so `zip`, generators, `enumerate`,
-  `Iterators.take`/`drop`, `foldl` and `accumulate` pair values with the right indices. Values are read in blocks of
-  whole chunks that fit in `default_chunk_size`; each chunk is read once when a block can span the last dimension.
+  `Iterators.take`/`drop`, `foldl` and `accumulate` pair values with the right indices. Values are read in blocks
+  that are contiguous in that order and fit in `default_chunk_size` (or one chunk, if larger), one chunk at a time
+  as iteration reaches it. Each chunk is read once when the leading dimensions and one chunk along the next fit;
+  otherwise chunks are split along that dimension and read once per piece, and once per index they span after it.
+  Stopping early reads only the chunks reached.
 - `zip` with a disk array accepts any iterator.
 
 ### Deprecated
