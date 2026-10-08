@@ -45,28 +45,30 @@ All functions accept a function `f` as the first argument, the disk array as the
 | `diskarrays_mean_impl` | `diskarrays_mean_impl(f, a::AbstractDiskArray, ::ComputeBackend; kwargs...)` |
 | `diskarrays_median_impl` | `diskarrays_median_impl(f, a::AbstractDiskArray, ::ComputeBackend; kwargs...)` |
 
-Each reduction reaches its own hook from every call form except two whole-array forms, listed
-in the table below. The hook receives only the keywords the caller passed, so a backend that
-implements whole-array reductions alone can define it without keywords. The defaults reduce
-whole arrays chunk by chunk, and pass `dims` and `init` on to `mapreduce`, which reaches
-`diskarrays_mapreduce_impl`.
+Each reduction reaches its own hook from every call form with a `Function`, with or without
+`dims` and `init`, as listed in the table below. The hook receives only the keywords the caller
+passed, so a backend that implements whole-array reductions without `init` alone can define it
+without keywords. The defaults reduce whole arrays chunk by chunk, and pass `dims` and `init`
+on to `mapreduce`, which reaches `diskarrays_mapreduce_impl`.
 
 | call | hook |
 |------|------|
 | `sum(a)`, `sum(f::Function, a)` | `diskarrays_sum_impl(f, a, backend)` |
+| `sum(f, a; init)`, `sum(a; init)` | `diskarrays_sum_impl(f, a, backend; init)` |
 | `sum(f, a; dims)`, `sum(f, a; dims, init)` | `diskarrays_sum_impl(f, a, backend; dims, init)` |
-| `sum(f, a; init)`, and `sum(f, a)` for a callable struct `f` | `diskarrays_mapreduce_impl(f, Base.add_sum, a, :, init, backend)` |
+| `sum(f, a)` for a callable struct `f` | `diskarrays_mapreduce_impl(f, Base.add_sum, a, :, Base._InitialValue(), backend)` |
 | `count(f, a; dims, init)`, every form | `diskarrays_count_impl(f, a, backend; dims, init)` |
 | `any(f, a; dims)`, every form | `diskarrays_any_impl(f, a, backend; dims)` |
 
-`prod`, `minimum`, `maximum` and `extrema` follow `sum`, and `all` follows `any`. A whole-array
-call with `init` goes to `mapreduce` because a keyword method for it would invalidate compiled
-`maximum(f, v; init)` calls in other packages, such as GeometryBasics.
+`prod`, `minimum`, `maximum` and `extrema` follow `sum`, and `all` follows `any`.
 
 DiskArrays reaches these hooks through Base's internal entry points where it can, which keeps
 compiled code in other packages valid when DiskArrays loads. Every public `sum` method with
-`dims` calls `Base._sum(f, a, dims; kw...)`, and DiskArrays adds a method for
-`a::AbstractDiskArray` there. For `any` and `all` the entry point depends on the Julia version:
+`dims` or `init` calls `Base._sum(f, a, dims; kw...)`, and DiskArrays adds a method for
+`a::AbstractDiskArray` there. For whole-array calls with `init` it is only the keyword-call
+method of `Base._sum(f, a, ::Colon)`. That method invalidates compiled `maximum(f, v; init)`
+calls in other packages, such as GeometryBasics, which costs 6–13 MethodInstances in a
+Makie session. For `any` and `all` the entry point depends on the Julia version:
 
 | Julia | `any(f, a)`, `all(f, a)` | with `dims` |
 |-------|--------------------------|-------------|

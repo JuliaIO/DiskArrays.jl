@@ -252,8 +252,7 @@ function DiskArrays.diskarrays_mapreduce_impl(f, op, a, dims, init, b::CountingB
 end
 
 # Each call form of each reduction gives the Array result and goes through the reduction's own
-# backend hook, with and without `dims`. Whole-array calls with `init` go through `mapreduce`,
-# except for `count`.
+# backend hook, with and without `dims` and `init`.
 function test_reductions_reach_backend()
     A = reshape(range(0.5, 1.5; length=40), 5, 8)
     B = A .> 1
@@ -265,25 +264,30 @@ function test_reductions_reach_backend()
         ("sum(a)", a -> sum(a), :sum), ("sum(f, a)", a -> sum(f, a), :sum),
         ("sum(f, a; dims=1)", a -> sum(f, a; dims=1), :sum),
         ("sum(a; dims=(1, 2))", a -> sum(a; dims=(1, 2)), :sum),
-        ("sum(f, a; init=1.0)", a -> sum(f, a; init=1.0), :mapreduce),
+        ("sum(f, a; init=1.0)", a -> sum(f, a; init=1.0), :sum),
+        ("sum(a; init=1.0)", a -> sum(a; init=1.0), :sum),
         ("sum(a; dims=2, init=1.0)", a -> sum(a; dims=2, init=1.0), :sum),
         ("prod(a)", a -> prod(a), :prod), ("prod(f, a)", a -> prod(f, a), :prod),
         ("prod(f, a; dims=1)", a -> prod(f, a; dims=1), :prod),
         ("prod(a; dims=(1, 2))", a -> prod(a; dims=(1, 2)), :prod),
-        ("prod(f, a; init=2.0)", a -> prod(f, a; init=2.0), :mapreduce),
+        ("prod(f, a; init=2.0)", a -> prod(f, a; init=2.0), :prod),
+        ("prod(a; init=2.0)", a -> prod(a; init=2.0), :prod),
         ("maximum(a)", a -> maximum(a), :maximum), ("maximum(f, a)", a -> maximum(f, a), :maximum),
         ("maximum(f, a; dims=1)", a -> maximum(f, a; dims=1), :maximum),
         ("maximum(a; dims=(1, 2))", a -> maximum(a; dims=(1, 2)), :maximum),
-        ("maximum(f, a; init=0.9)", a -> maximum(f, a; init=0.9), :mapreduce),
+        ("maximum(f, a; init=0.9)", a -> maximum(f, a; init=0.9), :maximum),
+        ("maximum(a; init=0.9)", a -> maximum(a; init=0.9), :maximum),
         ("maximum(a; dims=1, init=1.2)", a -> maximum(a; dims=1, init=1.2), :maximum),
         ("minimum(a)", a -> minimum(a), :minimum), ("minimum(f, a)", a -> minimum(f, a), :minimum),
         ("minimum(f, a; dims=1)", a -> minimum(f, a; dims=1), :minimum),
         ("minimum(a; dims=(1, 2))", a -> minimum(a; dims=(1, 2)), :minimum),
-        ("minimum(f, a; init=-2.0)", a -> minimum(f, a; init=-2.0), :mapreduce),
+        ("minimum(f, a; init=-2.0)", a -> minimum(f, a; init=-2.0), :minimum),
+        ("minimum(a; init=-2.0)", a -> minimum(a; init=-2.0), :minimum),
         ("extrema(a)", a -> extrema(a), :extrema), ("extrema(f, a)", a -> extrema(f, a), :extrema),
         ("extrema(f, a; dims=1)", a -> extrema(f, a; dims=1), :extrema),
         ("extrema(a; dims=(1, 2))", a -> extrema(a; dims=(1, 2)), :extrema),
-        ("extrema(f, a; init=(0.0, 0.1))", a -> extrema(f, a; init=(0.0, 0.1)), :mapreduce),
+        ("extrema(f, a; init=(0.0, 0.1))", a -> extrema(f, a; init=(0.0, 0.1)), :extrema),
+        ("extrema(a; init=(0.0, 0.1))", a -> extrema(a; init=(0.0, 0.1)), :extrema),
         ("count(p, a)", a -> count(p, a), :count),
         ("count(p, a; dims=1)", a -> count(p, a; dims=1), :count),
         ("count(p, a; dims=(1, 2))", a -> count(p, a; dims=(1, 2)), :count),

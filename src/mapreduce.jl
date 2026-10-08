@@ -70,10 +70,8 @@ _diskarrays_mapreduce_impl(f, op, a::AbstractDiskArray, dims, ::Base._InitialVal
 
 
 # ── Backend hooks for sum, prod, minimum, maximum, extrema ──────────
-# Whole-array calls enter through public methods without keywords. Any method that takes a
-# whole-array `init` adds a `Core.kwcall` method that invalidates compiled
-# `maximum(f, ::AbstractVector; init)` callers (GeometryBasics, so every Makie session); those
-# calls reach the backend through `mapreduce`.
+# Whole-array calls without keywords enter through public methods without keywords, so they
+# add no `Core.kwcall` method on the public functions.
 for fname in (:sum, :prod, :minimum, :maximum, :extrema)
     @eval begin
         # `F` forces specialization on `f`, which is only passed through here
@@ -90,6 +88,16 @@ const _ReduceDims = Union{Integer,Tuple{Vararg{Integer}},AbstractVector{<:Intege
 for fname in (:sum, :prod, :minimum, :maximum, :extrema)
     @eval Base.$(Symbol(:_, fname))(f::F, a::AbstractDiskArray, dims::_ReduceDims; kw...) where {F} =
         $(Symbol(:diskarrays_, fname, :_impl))(f, a, get_backend(a); dims, kw...)
+end
+
+# Whole-array calls with `init`: `sum(f, a; init)` and `sum(a; init)` both call
+# `Base._sum(f, a, :; init)`. Only its keyword-call method is defined, so positional
+# whole-array calls keep the public methods above. It invalidates compiled
+# `maximum(f, ::AbstractVector; init)` callers such as GeometryBasics' (6–13 MethodInstances
+# in a Makie session).
+for fname in (:sum, :prod, :minimum, :maximum, :extrema)
+    @eval Core.kwcall(kw::NamedTuple, ::typeof(Base.$(Symbol(:_, fname))), f::F, a::AbstractDiskArray, ::Colon) where {F} =
+        $(Symbol(:diskarrays_, fname, :_impl))(f, a, get_backend(a); kw...)
 end
 
 # Chunk-wise defaults for the whole-array reductions without `init`. For `any`/`all` they stop
