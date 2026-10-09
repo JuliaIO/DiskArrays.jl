@@ -1228,3 +1228,40 @@ end
     @test eltype(chunkinds_offset) == ChunkIndex{2,DiskArrays.OffsetChunks}
     @test chunkinds_offset[1, 1] == ChunkIndex(1, 1, offset=true)
 end
+
+# issue #298
+
+struct CustomIndexDiskArray <: AbstractDiskArray{Int,1}
+    data::Vector{Int}
+    read_count::Ref{Int}
+end
+
+Base.size(a::CustomIndexDiskArray) = size(a.data)
+DiskArrays.eachchunk(a::CustomIndexDiskArray) = DiskArrays.GridChunks(a, (2,))
+DiskArrays.haschunks(::CustomIndexDiskArray) = DiskArrays.Chunked()
+function DiskArrays.readblock!(
+    a::CustomIndexDiskArray, out, i::AbstractUnitRange
+)
+    a.read_count[] += 1
+    return out .= a.data[i]
+end
+
+struct CustomIndex end
+DiskArrays.getindex_disk(a::CustomIndexDiskArray, ::CustomIndex) = a.data[end]
+
+@testset "Custom getindex_disk index" begin
+    read_count = Ref(0)
+    a = CustomIndexDiskArray([10, 20, 30], read_count)
+
+    @test a[CustomIndex()] == 30
+    @test read_count[] == 0
+
+    @test_throws BoundsError a[4]
+    @test_throws BoundsError a[2:4]
+    @test_throws BoundsError a[[1, 4]]
+    @test read_count[] == 0
+
+    @test a[2] == 20
+    @test a[1:2] == [10, 20]
+    @test read_count[] == 2
+end

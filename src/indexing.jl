@@ -28,8 +28,13 @@ Internal `getindex` for disk arrays.
 
 Converts indices to ranges and calls `DiskArrays.readblock!`
 """
-function getindex_disk(a::AbstractArray, i::Union{Integer,CartesianIndex}...)
+# Keep bounds checks in the built-in methods so custom overloads can define
+# and validate their own index domains.
+Base.@propagate_inbounds function getindex_disk(
+    a::AbstractArray, i::Union{Integer,CartesianIndex}...
+)
     checkscalar(a, i)
+    Base.@boundscheck checkbounds(a, i...)
     # Use a 1 x 1 block
     outputarray = Array{eltype(a)}(undef, map(_ -> 1, size(a))...)
     i = Base.to_indices(a, i)
@@ -42,9 +47,9 @@ function getindex_disk(a::AbstractArray, i::Union{Integer,CartesianIndex}...)
     # Return the only value
     return only(outputarray)
 end
-function getindex_disk(a::AbstractArray, i::Integer)
+Base.@propagate_inbounds function getindex_disk(a::AbstractArray, i::Integer)
     checkscalar(a, i)
-    checkbounds(a, i)
+    Base.@boundscheck checkbounds(a, i)
     # Use a 1 x 1 block
     outputarray = Array{eltype(a)}(undef, map(_ -> 1, size(a))...)
     # Convert linear index to length 1 cartesian ranges
@@ -54,11 +59,22 @@ function getindex_disk(a::AbstractArray, i::Integer)
     # Return the only value
     return only(outputarray)
 end
-getindex_disk(a::AbstractArray, i...) = getindex_disk!(nothing, a, i...)
-getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OneBasedChunks}) =
-    a[eachchunk(a)[i.I]...]
-getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OffsetChunks}) =
-    wrapchunk(a[nooffset(i)], eachchunk(a)[i.I])
+Base.@propagate_inbounds function getindex_disk(a::AbstractArray, i...)
+    Base.@boundscheck checkbounds(a, i...)
+    return getindex_disk!(nothing, a, i...)
+end
+Base.@propagate_inbounds function getindex_disk(
+    a::AbstractArray, i::ChunkIndex{<:Any,OneBasedChunks}
+)
+    Base.@boundscheck checkbounds(a, i)
+    return a[eachchunk(a)[i.I]...]
+end
+Base.@propagate_inbounds function getindex_disk(
+    a::AbstractArray, i::ChunkIndex{<:Any,OffsetChunks}
+)
+    Base.@boundscheck checkbounds(a, i)
+    return wrapchunk(a[nooffset(i)], eachchunk(a)[i.I])
+end
 
 function getindex_disk!(out::Union{Nothing,AbstractArray}, a::AbstractArray, i...)
     # Check if we can write once or need to use multiple batches
@@ -310,7 +326,6 @@ macro implement_getindex(t)
         DiskArrays.isdisk(::Type{<:$t}) = true
         
         Base.@propagate_inbounds function Base.getindex(a::$t, i...) 
-            Base.@boundscheck checkbounds(a, i...)
             return getindex_disk(a, i...)
         end
 
