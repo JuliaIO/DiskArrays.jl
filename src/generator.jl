@@ -55,7 +55,9 @@ function Base.collect(itr::DiskGenerator{<:AbstractArray{<:Any,N}}) where {N}
 end
 
 # Warning: this is not public API!
-function Base.collect_similar(A::AbstractArray, itr::DiskGenerator{<:AbstractArray{<:Any,N}}) where {N}
+function Base.collect_similar(
+    A::AbstractArray, itr::DiskGenerator{<:AbstractArray{<:Any,N}}
+) where {N}
     y = iterate(itr)
     shp = axes(itr.iter)
     if y === nothing
@@ -76,7 +78,6 @@ function Base.collect_similar(A::AbstractArray, itr::DiskGenerator{<:AbstractArr
         end
     end
     return dest
-
 end
 
 macro implement_generator(t)

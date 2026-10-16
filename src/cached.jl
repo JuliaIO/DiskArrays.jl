@@ -1,4 +1,4 @@
-import Mmap
+using Mmap: Mmap
 
 """
     CachedDiskArray <: AbstractChunkTiledDiskArray
@@ -20,7 +20,9 @@ struct CachedDiskArray{T,N,A<:AbstractArray{T,N},C} <: AbstractChunkTiledDiskArr
 end
 function CachedDiskArray(A::AbstractArray{T,N}; maxsize=1000, mmap=false) where {T,N}
     by(x) = sizeof(x) ÷ 1_000_000 # In Megabytes
-    CachedDiskArray(A, LRU{ChunkIndex{N,OffsetChunks},OffsetArray{T,N,Array{T,N}}}(; by, maxsize),mmap)
+    return CachedDiskArray(
+        A, LRU{ChunkIndex{N,OffsetChunks},OffsetArray{T,N,Array{T,N}}}(; by, maxsize), mmap
+    )
 end
 
 # Scalar indexing is allowed on CachedDiskArray
@@ -36,10 +38,10 @@ haschunks(A::CachedDiskArray) = haschunks(parent(A))
 eachchunk(A::CachedDiskArray) = eachchunk(parent(A))
 
 # OffsetChunks return an OffsetArray, OneBasedChunks an Array
-Base.getindex(A::CachedDiskArray, i::ChunkIndex{N,OffsetChunks}) where {N} = 
-    _getchunk(A, i)
-Base.getindex(A::CachedDiskArray, i::ChunkIndex{N,OneBasedChunks}) where {N} = 
-    parent(_getchunk(A, i))
+Base.getindex(A::CachedDiskArray, i::ChunkIndex{N,OffsetChunks}) where {N} = _getchunk(A, i)
+function Base.getindex(A::CachedDiskArray, i::ChunkIndex{N,OneBasedChunks}) where {N}
+    return parent(_getchunk(A, i))
+end
 
 function _getchunk(A::CachedDiskArray, i::ChunkIndex)
     get!(A.cache, i) do
@@ -47,18 +49,14 @@ function _getchunk(A::CachedDiskArray, i::ChunkIndex)
         chunk = parent(A)[inds...]
         if A.mmap
             mmappedarray = Mmap.mmap(
-                tempname(), 
-                Array{eltype(chunk),ndims(chunk)}, 
-                size(chunk); 
-                shared=false
+                tempname(), Array{eltype(chunk),ndims(chunk)}, size(chunk); shared=false
             )
             copyto!(mmappedarray, chunk)
             chunk = mmappedarray
         end
-        wrapchunk(chunk, inds)
+        return wrapchunk(chunk, inds)
     end
 end
-
 
 """
     cache(A::AbstractArray; maxsize=1000, mmap=false)
@@ -69,4 +67,3 @@ This function is intended to be extended by package that want to
 re-wrap the disk array afterwards, such as YAXArrays.jl or Rasters.jl.
 """
 cache(A::AbstractArray; maxsize=1000, mmap=false) = CachedDiskArray(A; maxsize, mmap)
-
