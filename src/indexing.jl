@@ -7,14 +7,15 @@ struct MultiReadArray{T,N,A<:Tuple} <: AbstractArray{T,N}
     a::A
 end
 function MultiReadArray(a)
-    MultiReadArray{Any,length(a),typeof(a)}(a)
+    return MultiReadArray{Any,length(a),typeof(a)}(a)
 end
 
 Base.size(a::MultiReadArray) = _mapflatten(length, a.a)
 Base.IndexStyle(::Type{<:MultiReadArray}) = IndexCartesian()
 Base.eachindex(a::MultiReadArray) = CartesianIndices(size(a))
-Base.getindex(a::MultiReadArray{<:Any,N}, I::Vararg{Int,N}) where {N} =
-    map(getindex, a.a, I) |> _flatten1
+function Base.getindex(a::MultiReadArray{<:Any,N}, I::Vararg{Int,N}) where {N}
+    return _flatten1(map(getindex, a.a, I))
+end
 
 _mapflatten(f, x) = foldl((x, y) -> (x..., f(y)), x; init=())
 _flatten1(a) = _flatten(first(a), Base.tail(a))
@@ -35,7 +36,7 @@ function getindex_disk(a::AbstractArray, i::Union{Integer,CartesianIndex}...)
     i = Base.to_indices(a, i)
     # Convert indices to length 1 ranges
     j = ntuple(ndims(a)) do d
-        d <= length(i) ? (i[d]:i[d]) : 1:1
+        return d <= length(i) ? (i[d]:i[d]) : 1:1
     end
     # Read the block
     readblock!(a, outputarray, j...)
@@ -55,10 +56,12 @@ function getindex_disk(a::AbstractArray, i::Integer)
     return only(outputarray)
 end
 getindex_disk(a::AbstractArray, i...) = getindex_disk!(nothing, a, i...)
-getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OneBasedChunks}) =
-    a[eachchunk(a)[i.I]...]
-getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OffsetChunks}) =
-    wrapchunk(a[nooffset(i)], eachchunk(a)[i.I])
+function getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OneBasedChunks})
+    return a[eachchunk(a)[i.I]...]
+end
+function getindex_disk(a::AbstractArray, i::ChunkIndex{<:Any,OffsetChunks})
+    return wrapchunk(a[nooffset(i)], eachchunk(a)[i.I])
+end
 
 function getindex_disk!(out::Union{Nothing,AbstractArray}, a::AbstractArray, i...)
     # Check if we can write once or need to use multiple batches
@@ -111,7 +114,9 @@ function getindex_disk_nobatch!(out::Union{Nothing,AbstractArray}, a::AbstractAr
         # outputarray is only a subset of the chunk, so copy to temparray first
         temparray = Array{eltype(a)}(undef, indices.temparray_size...)
         readblock_checked!(a, temparray, indices.data_indices...)
-        transfer_results_read!(outputarray, temparray, indices.output_indices, indices.temparray_indices)
+        transfer_results_read!(
+            outputarray, temparray, indices.output_indices, indices.temparray_indices
+        )
     end
     return outputarray
 end
@@ -182,7 +187,9 @@ function setindex_disk_nobatch!(a::AbstractArray, values::AbstractArray, i)
     else # :noalign
         # Blocks don't match, may need to read from `a` to `temparray` to fill gaps in the values
         temparray = Array{eltype(a)}(undef, indices.temparray_size...)
-        if any(ind -> is_sparse_index(ind; density_threshold=1.0), indices.temparray_indices)
+        if any(
+            ind -> is_sparse_index(ind; density_threshold=1.0), indices.temparray_indices
+        )
             # We have some sparse indexing pattern and are not in a batch situation, so
             # we need to read before writing.
             # This check could be optimized away in some cases, when writing unit ranges etc, 
@@ -190,7 +197,9 @@ function setindex_disk_nobatch!(a::AbstractArray, values::AbstractArray, i)
             readblock!(a, temparray, indices.data_indices...)
         end
         # Copy `values` to `temparray`
-        transfer_results_write!(values, temparray, indices.output_indices, indices.temparray_indices)
+        transfer_results_write!(
+            values, temparray, indices.output_indices, indices.temparray_indices
+        )
         # Write from `temparray` to `a`
         writeblock_checked!(a, temparray, indices.data_indices...)
     end
@@ -205,11 +214,13 @@ end
 Generate an `Array` to pass to `readblock!`
 """
 function create_outputarray(out::AbstractArray, a::AbstractArray, output_size::Tuple)
-    size(out) == output_size || throw(ArgumentError("Expected output array size of $output_size, got $(size(out))"))
+    size(out) == output_size ||
+        throw(ArgumentError("Expected output array size of $output_size, got $(size(out))"))
     return out
 end
-create_outputarray(::Nothing, a::AbstractArray, output_size::Tuple) =
-    Array{eltype(a)}(undef, output_size...)
+function create_outputarray(::Nothing, a::AbstractArray, output_size::Tuple)
+    return Array{eltype(a)}(undef, output_size...)
+end
 
 """
     transfer_results_read!(outputarray, temparray, outputindices, temparrayindices)
@@ -218,9 +229,11 @@ Copy results from `temparray` to `outputarray` for respective indices
 """
 function transfer_results_read!(outputarray, temparray, outputindices, temparrayindices)
     outputarray[outputindices...] = view(temparray, temparrayindices...)
-    outputarray
+    return outputarray
 end
-function transfer_results_read!(outputarray, temparray, oi::Tuple{Vararg{Int}}, ti::Tuple{Vararg{Int}})
+function transfer_results_read!(
+    outputarray, temparray, oi::Tuple{Vararg{Int}}, ti::Tuple{Vararg{Int}}
+)
     outputarray[oi...] = temparray[ti...]
     return outputarray
 end
@@ -234,7 +247,9 @@ function transfer_results_write!(values, temparray, valuesindices, temparrayindi
     temparray[temparrayindices...] = view(values, valuesindices...)
     return temparray
 end
-function transfer_results_write!(values, temparray, vi::Tuple{Vararg{Int}}, ti::Tuple{Vararg{Int}})
+function transfer_results_write!(
+    values, temparray, vi::Tuple{Vararg{Int}}, ti::Tuple{Vararg{Int}}
+)
     temparray[ti...] = values[oi...]
     return temparray
 end
@@ -249,7 +264,7 @@ Base.@assume_effects :foldable need_batch(a::AbstractArray, i) =
 
 function _need_batch(chunks, i, batch_strategy)
     needsbatch, chunksrem = _need_batch_index(first(i), chunks, batch_strategy)
-    needsbatch ? true : _need_batch(chunksrem, Base.tail(i), batch_strategy)
+    return needsbatch ? true : _need_batch(chunksrem, Base.tail(i), batch_strategy)
 end
 _need_batch(::Tuple{}, ::Tuple{}, _) = false
 _need_batch(::Tuple{}, _, _) = false
@@ -258,17 +273,24 @@ _need_batch(_, ::Tuple{}, _) = false
 # Integer,UnitRange and Colon are contiguous and dont need batching
 _need_batch_index(::Union{Integer,UnitRange,Colon}, chunks, _) = false, Base.tail(chunks)
 # CartesianIndices are contiguous, also dont need batching, but chunks need splitting
-_need_batch_index(i::CartesianIndices{N}, chunks, _) where {N} = false, last(splitchunks(i, chunks))
+function _need_batch_index(i::CartesianIndices{N}, chunks, _) where {N}
+    return false, last(splitchunks(i, chunks))
+end
 # CartesianIndex doesn't need batching, but chunks need splitting
-_need_batch_index(i::CartesianIndex{N}, chunks, _) where {N} = false, last(splitchunks(i, chunks))
+function _need_batch_index(i::CartesianIndex{N}, chunks, _) where {N}
+    return false, last(splitchunks(i, chunks))
+end
 # StepRange doesn't need batching for CanStepRange strategies
-_need_batch_index(::StepRange, chunks, ::BatchStrategy{CanStepRange}) = false, Base.tail(chunks)
+function _need_batch_index(::StepRange, chunks, ::BatchStrategy{CanStepRange})
+    return false, Base.tail(chunks)
+end
 # Everything else may need batching
 function _need_batch_index(i, chunks, batchstrategy)
     chunksnow, chunksrem = splitchunks(i, chunks)
     allow_multi = allow_multi_chunk_access(batchstrategy)
-    needsbatch = (allow_multi || has_chunk_gap(approx_chunksize.(chunksnow), i)) &&
-                 is_sparse_index(i; density_threshold=density_threshold(batchstrategy))
+    needsbatch =
+        (allow_multi || has_chunk_gap(approx_chunksize.(chunksnow), i)) &&
+        is_sparse_index(i; density_threshold=density_threshold(batchstrategy))
     return needsbatch, chunksrem
 end
 
@@ -301,22 +323,22 @@ function writeblock_checked!(a::AbstractArray, values::AbstractArray, i...)
     end
 end
 
-
 # Implementation macros
 
 macro implement_getindex(t)
     t = esc(t)
     quote
         DiskArrays.isdisk(::Type{<:$t}) = true
-        
-        Base.@propagate_inbounds function Base.getindex(a::$t, i...) 
+
+        Base.@propagate_inbounds function Base.getindex(a::$t, i...)
             Base.@boundscheck checkbounds(a, i...)
             return getindex_disk(a, i...)
         end
 
         function DiskArrays.ChunkIndices(a::$t; offset=false)
             return ChunkIndices(
-                map(s -> 1:s, size(eachchunk(a))), offset ? OffsetChunks() : OneBasedChunks()
+                map(s -> 1:s, size(eachchunk(a))),
+                offset ? OffsetChunks() : OneBasedChunks(),
             )
         end
     end
