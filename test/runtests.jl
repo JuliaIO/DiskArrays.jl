@@ -534,6 +534,12 @@ end
         @test c == 20:26
     end
 
+    @testset "cat with zero-length parts" begin
+        a = AccessCountDiskArray(collect(1:2); chunksize=(2,))
+        e = AccessCountDiskArray(Int[]; chunksize=(2,))
+        @test cat(e, a, e, a; dims=1) == [1, 2, 1, 2]
+    end
+
     @testset "ConcatDiskArray works for mixed element types" begin
         da1 = AccessCountDiskArray(collect(Float64, reshape(1:24, 4, 6, 1)))
         da2 = AccessCountDiskArray(collect(Float32, reshape(1:24, 4, 6, 1)))
