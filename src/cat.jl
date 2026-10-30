@@ -95,14 +95,14 @@ extenddims(a::Tuple{Vararg{Any,N}}, _::Tuple{Vararg{Any,N}}, _) where {N} = a
 Base.size(a::ConcatDiskArray) = a.size
 
 function arraysize_and_startinds(arrays1)
-    sizes = map(i -> zeros(Int, i), size(arrays1))
+    sizes = map(i -> fill(-1, i), size(arrays1))
     for i in CartesianIndices(arrays1)
         ai = arrays1[i]
         ai isa MissingTile && (ai.size === nothing && continue)
         size_ai = ai isa MissingTile ? ai.size : size(ai)
         sizecur = extenddims(size_ai, size(arrays1), 1)
         foreach(sizecur, i.I, sizes) do si, ind, sizeall
-            if sizeall[ind] == 0
+            if sizeall[ind] == -1
                 #init the size
                 sizeall[ind] = si
             elseif sizeall[ind] != si
@@ -112,7 +112,7 @@ function arraysize_and_startinds(arrays1)
     end
     r = map(sizes) do sizeall
         #Replace missing sizes with size 1
-        replace!(sizeall, 0 => 1)
+        replace!(sizeall, -1 => 1)
         #Add starting 1
         pushfirst!(sizeall, 1)
         for i in 2:length(sizeall)
