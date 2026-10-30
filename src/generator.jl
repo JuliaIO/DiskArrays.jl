@@ -1,48 +1,33 @@
 """
-    DiskGenerator{I,F}
+    DiskGenerator
 
-Replaces `Base.Generator` for disk arrays.
+Alias for `Base.Generator` over an `AbstractDiskArray`, e.g. `(f(x) for x in disk_array)`.
 
-Operates out-of-order over chunks, but `collect` 
-will create an array in the correct order.
+Iteration is unchanged, but `collect` (and so array comprehensions) reads the
+underlying array chunk by chunk, out of order, and writes the result into
+the correct position of the output array.
+
+This is implemented by specializing `collect` on the generator type rather than
+by overriding the `Base.Generator` constructor, which would invalidate
+compiled code for every `Base.Generator(f, ::Any)` call.
 """
-struct DiskGenerator{I,F}
-    f::F
-    iter::I
-end
-# Copied from `iterate(::Generator, s...) in julia 1.9
-function Base.iterate(dg::DiskGenerator, s...)
-    y = iterate(dg.iter, s...)
-    y === nothing && return nothing
-    y = y::Tuple{Any,Any} # try to give inference some idea of what to expect about the behavior of the next line
-    return (dg.f(y[1]), y[2])
-end
-Base.isempty(dg::DiskGenerator) = Base.isempty(dg.iter)
-Base.length(dg::DiskGenerator) = Base.length(dg.iter)
-Base.ndims(dg::DiskGenerator) = Base.ndims(dg.iter)
-Base.size(dg::DiskGenerator) = Base.size(dg.iter)
-Base.keys(dg::DiskGenerator) = Base.keys(dg.iter)
-function Base.IteratorSize(::Type{DiskGenerator{I,F}}) where {I,F}
-    return Base.IteratorSize(Iterators.Generator{I,F})
-end
-function Base.IteratorEltype(::Type{DiskGenerator{I,F}}) where {I,F}
-    return Base.IteratorEltype(Iterators.Generator{I,F})
-end
+const DiskGenerator = Base.Generator{<:AbstractDiskArray}
 
-# Collect zipped disk arrays in the right order
-# Copied from `collect(::Generator) in julia 1.9
-function Base.collect(itr::DiskGenerator{<:AbstractArray{<:Any,N}}) where {N}
+# Fill `dest`, allocated by `alloc(eltype, axes)`, with the generator output in the
+# order the disk array iterates (chunk by chunk), placing each value at its own index.
+# Copied from `collect(::Generator)` in julia 1.9
+function _collect_disk_generator(alloc, itr::Base.Generator)
     y = iterate(itr)
     shp = axes(itr.iter)
     if y === nothing
         et = Base.@default_eltype(itr)
-        return similar(Array{et,N}, shp)
+        return alloc(et, shp)
     end
     v1, st = y
-    dest = similar(Array{typeof(v1),N}, shp)
+    dest = alloc(typeof(v1), shp)
     i = y
     for I in eachindex(itr.iter)
-        if i isa Nothing # Mainly to keep JET clean 
+        if i isa Nothing # Mainly to keep JET clean
             error(
                 "Should not be reached: iterator is shorter than its `eachindex` iterator"
             )
@@ -54,35 +39,27 @@ function Base.collect(itr::DiskGenerator{<:AbstractArray{<:Any,N}}) where {N}
     return dest
 end
 
-# Warning: this is not public API!
-function Base.collect_similar(A::AbstractArray, itr::DiskGenerator{<:AbstractArray{<:Any,N}}) where {N}
-    y = iterate(itr)
-    shp = axes(itr.iter)
-    if y === nothing
-        et = Base.@default_eltype(itr)
-        return similar(A, et, shp)
+_collect_disk_generator(itr::Base.Generator) =
+    _collect_disk_generator(itr) do et, shp
+        similar(Array{et,length(shp)}, shp)
     end
-    v1, st = y
-    dest = similar(A, typeof(v1), shp)
-    i = y
-    for I in eachindex(itr.iter)
-        if i isa Nothing # Mainly to keep JET clean 
-            error(
-                "Should not be reached: iterator is shorter than its `eachindex` iterator"
-            )
-        else
-            dest[I] = first(i)
-            i = iterate(itr, last(i))
-        end
-    end
-    return dest
 
-end
+_collect_similar_disk_generator(A::AbstractArray, itr::Base.Generator) =
+    _collect_disk_generator((et, shp) -> similar(A, et, shp), itr)
 
+# Note: these extend `collect`/`map` instead of adding methods to the `Base.Generator`
+# constructor. The latter invalidates every compiled `Base.Generator(f, ::Any)` call site,
+# which is a lot of code in Base and the stdlibs.
 macro implement_generator(t)
     t = esc(t)
     quote
-        Base.Generator(f, A::$t) = $DiskGenerator(f, A)
-        Base.Generator(::Type{T}, A::$t) where {T} = $DiskGenerator(T, A)
+        function Base.collect(itr::Base.Generator{<:$t})
+            return $_collect_disk_generator(itr)
+        end
+        # `Base.map(f, A::AbstractArray)` is `collect_similar(A, Generator(f, A))`,
+        # which would otherwise fill the output in chunk order, not in index order.
+        function Base.map(f, A::$t)
+            return $_collect_similar_disk_generator(A, Base.Generator(f, A))
+        end
     end
 end
