@@ -331,6 +331,10 @@ end
     @test v == [1 201 401; 2 202 402]
     @test DiskArrays.haschunks(a) == DiskArrays.Unchunked()
     @test size(DiskArrays.eachchunk(a)) == (1, 1, 1)
+    @test Array(view(a, :, 1:0, :)) == zeros(Int, 10, 0, 5)
+    @test convert(Vector, UnchunkedDiskArray(zeros(0))) == Float64[]
+    # a broadcast is chunked by the size of its elements, not read in one piece
+    @test length(DiskArrays.eachchunk(UnchunkedDiskArray(1:10^8) .+ 1)) > 1
 end
 
 @testset "Index strategy decisions" begin
