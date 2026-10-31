@@ -43,11 +43,13 @@
         v = DiskArrays.ConcatDiskArray(reshape([tile(), missingtile, tile()], 1, 1, 3))
         @test size(eachchunk(v)) == (2, 2, 3)
         @test chunkexists(v, [(1, 1, 1), (2, 2, 2), (1, 2, 3)]) == [true, false, true]
-        @test chunkexists(v, ChunkIndices(v)) == cat(trues(2, 2), falses(2, 2), trues(2, 2); dims=3)
+        @test chunkexists(v, ChunkIndices(v)) ==
+            cat(trues(2, 2), falses(2, 2), trues(2, 2); dims=3)
 
         # Queries are forwarded to the tiles' own chunkexists
         nested = DiskArrays.ConcatDiskArray(reshape([a, missingtile, missingtile, a], 2, 2))
         @test size(eachchunk(nested)) == (8, 8)
-        @test chunkexists(nested, ChunkIndices(nested)) == [expected falses(4, 4); falses(4, 4) expected]
+        @test chunkexists(nested, ChunkIndices(nested)) ==
+            [expected falses(4, 4); falses(4, 4) expected]
     end
 end
