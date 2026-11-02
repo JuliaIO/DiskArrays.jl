@@ -17,7 +17,7 @@ function readblock!(A::AbstractChunkTiledDiskArray{T,N}, data, I...) where {T,N}
         chunk = A[chunkindex]
         # Find the overlapping indices
         inner_indices = map(axes(chunk), axes(data_offset)) do ax1, ax2
-            max(first(ax1), first(ax2)):min(last(ax1), last(ax2))
+            return max(first(ax1), first(ax2)):min(last(ax1), last(ax2))
         end
         for ii in CartesianIndices(inner_indices)
             data_offset[ii] = chunk[ii]
@@ -36,23 +36,28 @@ struct TiledDiskArray{T,N,F,G<:GridChunks{N}} <: AbstractChunkTiledDiskArray{T,N
     tileshape::G
 end
 export TiledDiskArray
-TiledDiskArray(f,T,tilenum, tilesize) = TiledDiskArray{T,length(tilenum),typeof(f),typeof(GridChunks(tilenum.*tilesize, tilesize))}(f,GridChunks(tilenum.*tilesize, tilesize))
+function TiledDiskArray(f, T, tilenum, tilesize)
+    return TiledDiskArray{
+        T,length(tilenum),typeof(f),typeof(GridChunks(tilenum .* tilesize, tilesize))
+    }(
+        f, GridChunks(tilenum .* tilesize, tilesize)
+    )
+end
 
-Base.size(A::TiledDiskArray) = map(arraysize_from_chunksize,A.tileshape.chunks)
+Base.size(A::TiledDiskArray) = map(arraysize_from_chunksize, A.tileshape.chunks)
 eachchunk(A::TiledDiskArray) = A.tileshape
 haschunks(::TiledDiskArray) = Chunked()
 
 function Base.getindex(A::TiledDiskArray, i::ChunkIndex{N,OffsetChunks}) where {N}
-    tile = _getchunk(A,i)
+    tile = _getchunk(A, i)
     inds = eachchunk(A)[i.I]
-    wrapchunk(tile, inds)
+    return wrapchunk(tile, inds)
 end
 
-Base.getindex(A::TiledDiskArray, i::ChunkIndex{N,OneBasedChunks}) where {N} = 
-    _getchunk(A, i)
-
-
+function Base.getindex(A::TiledDiskArray, i::ChunkIndex{N,OneBasedChunks}) where {N}
+    return _getchunk(A, i)
+end
 
 function _getchunk(A::TiledDiskArray, i::ChunkIndex)
-    A.tilefunction(i.I.I...)
+    return A.tilefunction(i.I.I...)
 end

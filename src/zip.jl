@@ -15,8 +15,9 @@ struct DiskZip{Is<:Tuple}
 end
 function DiskZip(As::AbstractArray...)
     map(As) do A
-        size(A) == size(first(As)) ||
-            throw(DimensionMismatch("Arrays zipped with disk arrays must be the same size"))
+        return size(A) == size(first(As)) || throw(
+            DimensionMismatch("Arrays zipped with disk arrays must be the same size")
+        )
     end
     # Get the chunkes of the first Chunked array
     chunks = reduce(As; init=nothing) do acc, A
@@ -30,7 +31,7 @@ function DiskZip(As::AbstractArray...)
         return DiskZip(As)
     else
         rechunked = map(As) do A
-            MockChunkedDiskArray(A, chunks)
+            return MockChunkedDiskArray(A, chunks)
         end
         return DiskZip(rechunked)
     end

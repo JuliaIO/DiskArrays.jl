@@ -26,7 +26,7 @@ const backend = @load_preference("backend", "default")
 function _backend_from_name(name::String)
     name == "default" && return DefaultBackend()
     name == "DiskArrayEngine" && return DiskArrayEngineBackend()
-    throw(ArgumentError("Invalid backend: \"$(name)\""))
+    return throw(ArgumentError("Invalid backend: \"$(name)\""))
 end
 
 const compute_backend = DynamicBackend(_backend_from_name(backend))
@@ -36,8 +36,9 @@ const compute_backend = DynamicBackend(_backend_from_name(backend))
 
 Switch the active backend for the current session.
 """
-set_dynamic_backend!(b::Union{DefaultBackend,DiskArrayEngineBackend}) =
-    compute_backend.current_backend = b
+function set_dynamic_backend!(b::Union{DefaultBackend,DiskArrayEngineBackend})
+    return compute_backend.current_backend = b
+end
 
 """
     set_backend(new_backend::String)
@@ -48,16 +49,24 @@ a preference, so it is also the active backend in future sessions.
 function set_backend(new_backend::String)
     b = _backend_from_name(new_backend)
     @set_preferences!("backend" => new_backend)
-    set_dynamic_backend!(b)
+    return set_dynamic_backend!(b)
 end
 
-const _DAE_PKGID = Base.PkgId(Base.UUID("2d4b2e14-ccd6-4284-b8b0-2378ace7c126"), "DiskArrayEngine")
+const _DAE_PKGID = Base.PkgId(
+    Base.UUID("2d4b2e14-ccd6-4284-b8b0-2378ace7c126"), "DiskArrayEngine"
+)
 
 function _backend_error_hint(io, exc, argtypes, kwargs)
-    any(T -> T <: DiskArrayEngineBackend, argtypes) || return
+    any(T -> T <: DiskArrayEngineBackend, argtypes) || return nothing
     if haskey(Base.loaded_modules, _DAE_PKGID)
-        print(io, "\nDiskArrayEngine.jl does not implement this operation for `DiskArrayEngineBackend`.")
+        print(
+            io,
+            "\nDiskArrayEngine.jl does not implement this operation for `DiskArrayEngineBackend`.",
+        )
     else
-        print(io, "\n`DiskArrayEngineBackend` methods are implemented in DiskArrayEngine.jl, make sure it is loaded with `using DiskArrayEngine`.")
+        print(
+            io,
+            "\n`DiskArrayEngineBackend` methods are implemented in DiskArrayEngine.jl, make sure it is loaded with `using DiskArrayEngine`.",
+        )
     end
 end

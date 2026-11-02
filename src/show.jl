@@ -18,7 +18,7 @@ function _show(io, _, A)
         foreach(eachchunk(A).chunks) do c
             print(io, "    ")
             show(IOContext(io, :compact => true), length.(c))
-            print(io, "\n")
+            return print(io, "\n")
         end
         println(io, ")")
     end

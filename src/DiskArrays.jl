@@ -1,6 +1,6 @@
 module DiskArrays
 
-import ConstructionBase
+using ConstructionBase: ConstructionBase
 import Base.PermutedDimsArrays: genperm
 
 using LRUCache: LRUCache, LRU
@@ -14,7 +14,8 @@ using Base: tail
     read(path, String)
 end DiskArrays
 
-export AbstractDiskArray, eachchunk, chunkexists, ChunkIndex, ChunkIndices, backend, withbackend,MissingTile
+export AbstractDiskArray,
+    eachchunk, chunkexists, ChunkIndex, ChunkIndices, backend, withbackend, MissingTile
 
 include("scalar.jl")
 include("chunks.jl")
@@ -88,8 +89,7 @@ end
 include("util/testtypes.jl")
 
 function __init__()
-    Base.Experimental.register_error_hint(_backend_error_hint, MethodError)
+    return Base.Experimental.register_error_hint(_backend_error_hint, MethodError)
 end
-
 
 end # module
