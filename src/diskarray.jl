@@ -29,7 +29,7 @@ function readblock!(a::AbstractArray, aout, r...)
         @warn "Using fallback readblock! for array $(typeof(a)). This should not happen but there should be a custom implementation."
     end
     aout .= view(a, CartesianIndices(r))
-    nothing
+    return nothing
 end
 
 """
@@ -88,5 +88,5 @@ function haschunks end
 haschunks(x) = Unchunked()
 
 function Base.checkbounds(::Type{Bool}, a::AbstractDiskArray, i::ChunkIndex)
-    checkbounds(Bool, eachchunk(a), i.I)
+    return checkbounds(Bool, eachchunk(a), i.I)
 end

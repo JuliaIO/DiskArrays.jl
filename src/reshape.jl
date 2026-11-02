@@ -20,16 +20,16 @@ rectangles in the parent array.
 However, we can support the case where only singleton dimensions are added, 
 later we could allow more special cases like joining two dimensions to one
 """
-struct ReshapedDiskArray{T,N,P<:AbstractArray{T},DMAP} <: AbstractReshapedDiskArray{T,N,P,DMAP}
+struct ReshapedDiskArray{T,N,P<:AbstractArray{T},DMAP} <:
+       AbstractReshapedDiskArray{T,N,P,DMAP}
     parent::P
     dmap::Val{DMAP}
     newsize::NTuple{N,Int}
 end
-dmap(::ReshapedDiskArray{<:Any,<:Any,<:Any,DMAP}) where DMAP = DMAP
+dmap(::ReshapedDiskArray{<:Any,<:Any,<:Any,DMAP}) where {DMAP} = DMAP
 # Base methods
 Base.size(r::AbstractReshapedDiskArray) = r.newsize
 Base.parent(r::AbstractReshapedDiskArray) = r.parent
-
 
 # DiskArrays interface
 haschunks(a::AbstractReshapedDiskArray) = haschunks(parent(a))
@@ -89,9 +89,8 @@ function reshape_index(a, default, replace)
             inew = Base.setindex(inew, indx, m)
         end
     end
-    inew
+    return inew
 end
-
 
 # Implementaion macro
 macro implement_reshape(t)

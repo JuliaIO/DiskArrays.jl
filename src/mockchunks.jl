@@ -9,7 +9,8 @@ regardless of the true chunk pattern of the parent array.
 This is useful in `zip` and other operations that can iterate
 over multiple arrays with different patterns.
 """
-struct MockChunkedDiskArray{T,N,A<:AbstractArray{T,N},C<:GridChunks} <: AbstractDiskArray{T,N}
+struct MockChunkedDiskArray{T,N,A<:AbstractArray{T,N},C<:GridChunks} <:
+       AbstractDiskArray{T,N}
     parent::A
     chunks::C
 end
@@ -33,9 +34,8 @@ function mockchunks(data::AbstractArray, chunks)
     else
         GridChunks(data, chunks)
     end
-    MockChunkedDiskArray(data, gridchunks)
+    return MockChunkedDiskArray(data, gridchunks)
 end
-
 
 Base.parent(A::MockChunkedDiskArray) = A.parent
 Base.size(A::MockChunkedDiskArray) = size(parent(A))
@@ -47,8 +47,9 @@ eachchunk(A::MockChunkedDiskArray) = A.chunks
 
 # These could be more efficient with memory in some cases, but this is simple
 readblock!(A::MockChunkedDiskArray, data, I...) = _readblock_mockchunked(A, data, I...)
-readblock!(A::MockChunkedDiskArray, data, I::AbstractVector...) =
-    _readblock_mockchunked(A, data, I...)
+function readblock!(A::MockChunkedDiskArray, data, I::AbstractVector...)
+    return _readblock_mockchunked(A, data, I...)
+end
 writeblock!(A::MockChunkedDiskArray, data, I...) = writeblock!(parent(A), data, I...)
 
 function _readblock_mockchunked(A, data, I...)

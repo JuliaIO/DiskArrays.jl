@@ -22,14 +22,14 @@ struct PaddedDiskArray{T,N,A<:AbstractArray{T,N},C,F<:T} <: AbstractDiskArray{T,
     fill::F
     chunks::C
 end
-function PaddedDiskArray(A::AbstractArray{T,N}, padding::NTuple{N,Tuple{Int,Int}};
-    fill=zero(eltype(A)),
+function PaddedDiskArray(
+    A::AbstractArray{T,N}, padding::NTuple{N,Tuple{Int,Int}}; fill=zero(eltype(A))
 ) where {T,N}
     map(padding) do (l, u)
-        (l < 0 || u < 0) && throw(ArgumentError("Padding must be non-negative"))
+        return (l < 0 || u < 0) && throw(ArgumentError("Padding must be non-negative"))
     end
     chunks = GridChunks(map(_pad_offset, eachchunk(A).chunks, padding))
-    PaddedDiskArray(A, padding, fill, chunks)
+    return PaddedDiskArray(A, padding, fill, chunks)
 end
 
 function _pad_offset(c::RegularChunks, (low, high))
@@ -44,7 +44,7 @@ function _pad_offset(c::RegularChunks, (low, high))
     return RegularChunks(chunksize, offset, size)
 end
 function _pad_offset(c::IrregularChunks, (low, high))
-    nlowchunks = Int(low > 0) 
+    nlowchunks = Int(low > 0)
     nhighchunks = Int(high > 0)
     offsets = Vector{Int}(undef, length(c.offsets) + nlowchunks + nhighchunks)
     # First offset is always zero
@@ -55,7 +55,7 @@ function _pad_offset(c::IrregularChunks, (low, high))
     end
     # Add offset for start of upper padding
     if nhighchunks > 0
-        offsets[end] = offsets[end-1] + high
+        offsets[end] = offsets[end - 1] + high
     end
     return IrregularChunks(offsets)
 end
@@ -63,28 +63,28 @@ end
 Base.parent(A::PaddedDiskArray) = A.parent
 function Base.size(A::PaddedDiskArray)
     map(size(parent(A)), A.padding) do s, (low, high)
-        s + low + high
+        return s + low + high
     end
 end
 
 haschunks(A::PaddedDiskArray) = haschunks(parent(A))
 eachchunk(A::PaddedDiskArray) = A.chunks
 
-readblock!(A::PaddedDiskArray, data, I::AbstractRange...) =
-    _readblock_padded(A, data, I...)
-writeblock!(A::PaddedDiskArray, data, I...) = 
-    throw(ArgumentError("Cannot write to a PaddedDiskArray"))
+readblock!(A::PaddedDiskArray, data, I::AbstractRange...) = _readblock_padded(A, data, I...)
+function writeblock!(A::PaddedDiskArray, data, I...)
+    return throw(ArgumentError("Cannot write to a PaddedDiskArray"))
+end
 
 function _readblock_padded(A, data, I::AbstractRange...)
     data .= A.fill
     Ipadded = map(I, A.padding) do i, (low, high)
-        i .- low
+        return i .- low
     end
     fs = map(axes(parent(A)), Ipadded) do a, ip
-        searchsortedfirst(ip, first(a))
+        return searchsortedfirst(ip, first(a))
     end
     ls = map(axes(parent(A)), Ipadded) do a, ip
-        searchsortedlast(ip, last(a))
+        return searchsortedlast(ip, last(a))
     end
     return if all(map(<=, fs, ls))
         Idata = map(:, fs, ls)
@@ -111,5 +111,6 @@ Pad any `AbstractArray` with fill values, updating chunk patterns.
 
 - `fill=zero(eltype(A))`: The value to pad the array with.
 """
-pad(A::AbstractArray{<:Any,N}, padding::NTuple{N,Tuple{Int,Int}}; kw...) where N = 
-    PaddedDiskArray(A, padding; kw...)
+function pad(A::AbstractArray{<:Any,N}, padding::NTuple{N,Tuple{Int,Int}}; kw...) where {N}
+    return PaddedDiskArray(A, padding; kw...)
+end

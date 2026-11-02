@@ -1,8 +1,7 @@
 # Helper: create a materialized + disk array pair
-make_arrays(data; chunksize=size(data)) = (
-    materialized = data,
-    disk = AccessCountDiskArray(data; chunksize=chunksize),
-)
+function make_arrays(data; chunksize=size(data))
+    return (materialized=data, disk=AccessCountDiskArray(data; chunksize=chunksize))
+end
 
 # ── Backend test helpers ─────────────────────────────────────────────────────
 
@@ -75,7 +74,10 @@ function test_specialized_reductions_default(data; chunksize=size(data))
             # so only the set of values (of `f`, which representative is first differs) is equal
             @test issetequal(unique(da), unique(mat))
             @test issetequal(unique(identity, da), unique(mat))
-            @test issetequal(map(x -> x > 0, unique(x -> x > 0, da)), map(x -> x > 0, unique(x -> x > 0, mat)))
+            @test issetequal(
+                map(x -> x > 0, unique(x -> x > 0, da)),
+                map(x -> x > 0, unique(x -> x > 0, mat)),
+            )
         end
     end
 end
@@ -107,12 +109,14 @@ function test_mapreduce_default(data; chunksize=size(data))
         end
         @testset "mapreduce (dims=)" begin
             @test mapreduce(x -> 2x, +, da; dims=1) ≈ mapreduce(x -> 2x, +, mat; dims=1)
-            @test mapreduce(x -> 2x, +, da; dims=(1, 2)) ≈ mapreduce(x -> 2x, +, mat; dims=(1, 2))
+            @test mapreduce(x -> 2x, +, da; dims=(1, 2)) ≈
+                mapreduce(x -> 2x, +, mat; dims=(1, 2))
         end
         @testset "mapreduce (init)" begin
             @test mapreduce(identity, +, da; init=0) ≈ mapreduce(identity, +, mat; init=0)
             @test mapreduce(identity, *, da; init=1) ≈ mapreduce(identity, *, mat; init=1)
-            @test mapreduce(identity, +, da; dims=1, init=0.0) ≈ mapreduce(identity, +, mat; dims=1, init=0.0)
+            @test mapreduce(identity, +, da; dims=1, init=0.0) ≈
+                mapreduce(identity, +, mat; dims=1, init=0.0)
         end
         @testset "mapreducedim!" begin
             # Reduce over the last and over the first dimension
@@ -163,7 +167,7 @@ function test_backend_dispatch()
     @test tb isa DiskArrays.ComputeBackend
     @test tb.call_count[] == 0
 
-    a = AccessCountDiskArray([1.0, 2.0, 3.0, 4.0, 5.0], chunksize=(2,))
+    a = AccessCountDiskArray([1.0, 2.0, 3.0, 4.0, 5.0]; chunksize=(2,))
     @test DiskArrays.get_backend(a) === DiskArrays.get_backend(DiskArrays.compute_backend)
     wa = withbackend(a, tb)
     @test wa == a
@@ -203,7 +207,8 @@ function test_backend_dispatch()
     @test dynsum(a, db) == 15.0
     @test only(Base.return_types(dynsum, (typeof(a), typeof(db)))) ==
         only(Base.return_types(staticsum, (typeof(a),)))
-    @test only(Base.return_types(sum, (typeof(a),))) == only(Base.return_types(staticsum, (typeof(a),)))
+    @test only(Base.return_types(sum, (typeof(a),))) ==
+        only(Base.return_types(staticsum, (typeof(a),)))
     db.current_backend = DiskArrays.DiskArrayEngineBackend()
     @test DiskArrays.get_backend(db) === DiskArrays.DiskArrayEngineBackend()
 
