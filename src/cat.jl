@@ -147,7 +147,7 @@ function readblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
     _concat_diskarray_block_io(a, inds...) do outer_range, array_range, I
         vout = view(aout, outer_range...)
         if I isa CartesianIndex
-            readblock!(a.parents[I], vout, array_range...)
+            readblock_checked!(a.parents[I], vout, array_range...)
         else 
             vout .= (I.fillvalue,)
         end
@@ -159,7 +159,7 @@ function writeblock!(a::ConcatDiskArray, aout, inds::AbstractUnitRange...)
         if I isa MissingTile
             throw(ArgumentError("Cannot write through a missing tile"))
         else
-            writeblock!(a.parents[I], data, array_range...)
+            writeblock_checked!(a.parents[I], data, array_range...)
         end
     end
 end
@@ -227,21 +227,26 @@ function concat_chunksize(parents)
             end
         end
         # Merge the chunks
-        init = RegularChunks(approx_chunksize(first(v)), 0, 0)
-        reduce(mergechunks, v; init=init)
+        reduce(mergechunks, v)
     end
     extenddims(newchunks, size(parents), RegularChunks(1, 0, 1))
     return GridChunks(newchunks...)
 end
 
-function mergechunks(a::RegularChunks, b::RegularChunks)
-    if a.arraysize == 0 || (a.chunksize == b.chunksize && length(last(a)) == a.chunksize)
+function mergechunks(a::ChunkVector, b::ChunkVector)
+    arraysize_from_chunksize(a) == 0 && return b
+    arraysize_from_chunksize(b) == 0 && return a
+    return _mergechunks(a, b)
+end
+function _mergechunks(a::RegularChunks, b::RegularChunks)
+    # b continues a's grid only if it starts on a chunk boundary of a full last chunk
+    if a.chunksize == b.chunksize && b.offset == 0 && length(last(a)) == a.chunksize
         RegularChunks(a.chunksize, a.offset, a.arraysize + b.arraysize)
     else
         mergechunks_irregular(a, b)
     end
 end
-mergechunks(a::ChunkVector, b::ChunkVector) = mergechunks_irregular(a, b)
+_mergechunks(a::ChunkVector, b::ChunkVector) = mergechunks_irregular(a, b)
 
 mergechunks_irregular(a, b) =
     IrregularChunks(; chunksizes=filter(!iszero, [length.(a); length.(b)]))

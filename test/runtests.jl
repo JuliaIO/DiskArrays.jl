@@ -532,12 +532,33 @@ end
         d .= 1:26
         @test d == 1:26
         @test c == 20:26
+        # arrays whose chunk grid has an offset keep their chunks:
+        t1 = DiskArrays.mockchunks(collect(1:7), GridChunks(RegularChunks(4, 1, 7)))
+        t2 = DiskArrays.mockchunks(collect(8:14), GridChunks(RegularChunks(4, 1, 7)))
+        @test vcat(t1, t2) == 1:14
+        @test collect(eachchunk(vcat(t1, t2)).chunks[1]) == [1:3, 4:7, 8:10, 11:14]
     end
 
     @testset "cat with zero-length parts" begin
         a = AccessCountDiskArray(collect(1:2); chunksize=(2,))
         e = AccessCountDiskArray(Int[]; chunksize=(2,))
         @test cat(e, a, e, a; dims=1) == [1, 2, 1, 2]
+        n = AccessCountDiskArray(collect(1:10); chunksize=(4,))
+        @test vcat(e, e) == Int[]
+        @test vcat(e, n) == vcat(n, e) == 1:10
+        @test eachchunk(vcat(e, n)) == eachchunk(vcat(n, e)) == eachchunk(n)
+        ei = DiskArrays.mockchunks(Int[], GridChunks(IrregularChunks(; chunksizes=Int[])))
+        @test vcat(ei, n) == vcat(n, ei) == 1:10
+        @test eachchunk(vcat(ei, n)) == eachchunk(vcat(n, ei)) == eachchunk(n)
+        m0 = ChunkedDiskArray(zeros(Int, 2, 0); chunksize=(2, 1))
+        m = ChunkedDiskArray(collect(reshape(1:6, 2, 3)); chunksize=(2, 2))
+        @test hcat(m0, m0) == zeros(Int, 2, 0)
+        @test hcat(m0, m) == hcat(m, m0) == m
+        @test cat(m, m0, m; dims=2) == repeat(collect(m), 1, 2)
+        c = vcat(n, e, a)
+        c[:] = 12:-1:1
+        @test c[:] == 12:-1:1
+        @test getindex_count(e) == setindex_count(e) == 0
     end
 
     @testset "ConcatDiskArray works for mixed element types" begin

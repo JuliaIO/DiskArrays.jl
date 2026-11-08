@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased]
 
+- `cat`, `vcat` and `hcat` with zero-length arrays in any position no longer throw, keep
+  the chunks of the non-empty arrays and never read from or write to the empty ones
+- `cat`, `vcat` and `hcat` of arrays whose chunk grid has an offset keep the chunks of
+  those arrays
+
 ## v0.4.25
 
 - `estimate_chunksize`, and so `eachchunk` of an in-memory array or view, no longer allocates
