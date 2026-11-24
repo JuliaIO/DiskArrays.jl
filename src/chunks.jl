@@ -449,7 +449,7 @@ function estimate_chunksize(size::Tuple, elsize)
     ii = something(findfirst(>=(maxelems), cp), length(size) + 1)
     chunksize = ntuple(Val(length(size))) do idim
         if idim < ii
-            size[idim]
+            max(size[idim], 1)  # chunk sizes must be positive, also along an empty axis
         elseif idim > ii
             1
         else
