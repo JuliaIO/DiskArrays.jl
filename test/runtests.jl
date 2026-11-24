@@ -462,6 +462,8 @@ end
     @test collect(zd3_a) == collect(zd3_b) == collect(zd3_c) == collect(za3)
     @test all(zd3_a .== zd3_b .== zd3_c .== za3)
     @test_throws DimensionMismatch zip(da, rand(2, 3, 1))
+    # Zipping with a non-array iterator falls back to `Base.zip`
+    @test zip(da, Iterators.repeated(1)) isa Iterators.Zip
 end
 
 @testset "cat" begin
@@ -536,6 +538,12 @@ end
         d .= 1:26
         @test d == 1:26
         @test c == 20:26
+    end
+
+    @testset "cat with zero-length parts" begin
+        a = AccessCountDiskArray(collect(1:2); chunksize=(2,))
+        e = AccessCountDiskArray(Int[]; chunksize=(2,))
+        @test cat(e, a, e, a; dims=1) == [1, 2, 1, 2]
     end
 
     @testset "ConcatDiskArray works for mixed element types" begin
@@ -960,6 +968,14 @@ end
     @test length(g) == 90
     @test ndims(g) == 2
     @test keys(g) == CartesianIndices((10, 9))
+    # `map` is also read chunk by chunk, but the result is in index order
+    a_disk = AccessCountDiskArray(a; chunksize=(5, 3))
+    @test map(x -> 2x, a_disk) == 2 .* a
+    @test getindex_count(a_disk) == 6
+    # Generators are collected specially by specializing `collect` and `map`;
+    # the `Base.Generator` constructor must not be extended, as that invalidates
+    # compiled code for all `Base.Generator(f, ::Any)` calls
+    @test !any(m -> m.module === DiskArrays, methods(Base.Generator))
 end
 
 @testset "Array methods" begin
