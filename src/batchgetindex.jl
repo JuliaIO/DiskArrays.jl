@@ -103,13 +103,13 @@ function span(a::AbstractArray{<:Integer})
     iszero(length(a)) ? 0 : 1 - (-(extrema(a)...))
 end
 function span(a::AbstractArray{CartesianIndex{N}}) where {N}
+    # Indices without dimensions have no axis that could be empty in the block
+    # that is read or written, so an empty selection of them is not supported
+    N > 0 && isempty(a) && return 0
     minind, maxind = extrema(a)
     prod((maxind - minind + oneunit(minind)).I)
 end
-function span(a::AbstractArray{Bool})
-    minind, maxind = extrema(view(CartesianIndices(size(a)), a))
-    prod((maxind - minind + oneunit(minind)).I)
-end
+span(a::AbstractArray{Bool}) = span(view(CartesianIndices(size(a)), a))
 # The number of indices to actually be read
 numind(a::AbstractArray{Bool}) = sum(a)
 numind(a::Union{AbstractArray{<:Integer},AbstractArray{<:CartesianIndex}}) = length(a)
@@ -126,6 +126,7 @@ function find_subranges_sorted(inds, allow_steprange=false)
     T = allow_steprange ? Union{UnitRange{Int},StepRange{}} : UnitRange{Int}
     rangelist = T[]
     outputinds = UnitRange{Int}[]
+    isempty(inds) && return rangelist, outputinds
     current_step = 0
     current_base = 1
     for iind in 1:length(inds)-1
@@ -202,7 +203,7 @@ function process_index(i::AbstractArray{<:Integer,N}, chunks::Tuple{Vararg{Chunk
     tempinds = Tuple{Vector{Int}}[]
     datainds = Tuple{UnitRange{Int}}[]
     outinds = Tuple{Vector{CartesianIndex{N}}}[]
-    maxtempindex = -1
+    maxtempindex = 0
     # Calculate data, temp and output indices
     for (chunkindex, indexpairs) in chunksdict
         dataindex = extrema(first, indexpairs)
@@ -228,7 +229,7 @@ function process_index(i::AbstractArray{<:Integer,N}, chunks::Tuple{Vararg{Chunk
             (r,)
         end
         outinds = tuple.(outputinds)
-        tempsize = maximum(length, rangelist)
+        tempsize = maximum(length, rangelist; init=0)
         DiskIndex((length(i),), (tempsize,), (outinds,), (tempinds,), (datainds,))
     else
         p = mysortperm(i)
@@ -243,7 +244,7 @@ function process_index(i::AbstractArray{<:Integer,N}, chunks::Tuple{Vararg{Chunk
         outinds = map(outputinds) do oi
             (view(p, oi),)
         end
-        tempsize = maximum(length, rangelist)
+        tempsize = maximum(length, rangelist; init=0)
         DiskIndex(size(i), (tempsize,), (outinds,), (tempinds,), (datainds,))
     end
     return di, Base.tail(chunks)
