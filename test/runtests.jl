@@ -712,6 +712,20 @@ if VERSION >= v"1.7.0"
     end
 end
 
+@testset "Broadcast of chunked arrays over an empty dimension" begin
+    for (a, b) in (
+        (ChunkedDiskArray(ones(4, 0); chunksize=(2, 1)), ChunkedDiskArray(ones(4, 0); chunksize=(4, 5))),
+        (ChunkedDiskArray(ones(0); chunksize=(1,)), ChunkedDiskArray(ones(0); chunksize=(1,))),
+        (ChunkedDiskArray(ones(0, 3); chunksize=(1, 2)), ChunkedDiskArray(ones(1, 3); chunksize=(1, 3))),
+    )
+        ref = parent(a) .+ parent(b)
+        @test collect(a .+ b) == ref
+        @test (zeros(size(ref)) .= a .+ b) == ref
+    end
+    a = ChunkedDiskArray(collect(1.0:10); chunksize=(3,))
+    @test collect(view(a, 1:0) .+ view(a, 3:2)) == Float64[]
+end
+
 @testset "Type inference for indexing" begin
     data = rand(1:99, 10, 10, 10)
     a1 = AccessCountDiskArray(data, chunksize=(10, 10, 1))
