@@ -89,6 +89,9 @@ for fname in (:sum, :prod, :all, :any, :minimum, :maximum)
 
         function $(fnamedef)(f, a::AbstractDiskArray; dims=:)
             if dims === Colon()
+                # Without chunks there is nothing to reduce over, so do as Base
+                # does for an empty array:
+                isempty(eachchunk(a)) && return $fname(f, eltype(a)[])
                 $fname(eachchunk(a)) do chunk
                     $fname(f, a[chunk...])
                 end
@@ -103,7 +106,7 @@ end
 Base.count(v::AbstractDiskArray) = count(identity, v::AbstractDiskArray)
 Base.count(f, v::AbstractDiskArray) = diskarrays_count_impl(f, v, get_backend(v))
 function diskarrays_count_impl(f, v::AbstractDiskArray, ::ComputeBackend)
-    sum(eachchunk(v)) do chunk
+    sum(eachchunk(v); init=0) do chunk
         count(f, v[chunk...])
     end
 end
@@ -111,6 +114,7 @@ end
 Base.unique(v::AbstractDiskArray) = unique(identity, v)
 Base.unique(f, v::AbstractDiskArray) = diskarrays_unique_impl(f, v, get_backend(v))
 function diskarrays_unique_impl(f, v::AbstractDiskArray, ::ComputeBackend)
+    isempty(eachchunk(v)) && return eltype(v)[]
     reduce((unique(f, v[c...]) for c in eachchunk(v))) do acc, u
         unique!(f, append!(acc, u))
     end
