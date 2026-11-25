@@ -1069,6 +1069,10 @@ end
     @test adrop isa ReshapedDiskArray
     @test size(adrop) == (10, 5)
     @test adrop[:, :] == a[:, 1, :]
+    # A vector reshaped to a vector, which was ambiguous on 32-bit systems
+    v = AccessCountDiskArray(collect(1:6); chunksize=(4,))
+    @test reshape(v, 6)[:] == 1:6
+    @test reshape(v, (6,))[:] == 1:6
 end
 
 import Base.PermutedDimsArrays.invperm
