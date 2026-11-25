@@ -129,6 +129,24 @@ function test_setindex(a)
     @test setindex_count(a) == 8
     a[CartesianIndex(1, 1, 1)] = -10
     @test trueparent(a)[1, 1, 1] == -10
+    # Repeated indices do not cover their span, so the block has to be read
+    # before it is written back, and the last assignment wins:
+    a[1:3, 1, 1] = [101, 102, 103]
+    reads = getindex_count(a)
+    a[[1, 1, 3], 1, 1] = [1, 2, 3]
+    @test trueparent(a)[1:3, 1, 1] == [2, 102, 3]
+    @test getindex_count(a) > reads
+    # Repeated indices that still select every element in their span need no read:
+    reads = getindex_count(a)
+    a[[1, 2, 1], 1, 1] = [1, 2, 3]
+    @test trueparent(a)[1:2, 1, 1] == [3, 2]
+    @test getindex_count(a) == reads
+    # A mask that selects every element in its span needs no read either:
+    m = falses(4, 5, 1)
+    m[1:3, 1:2, 1] .= true
+    a[m] = 11:16
+    @test trueparent(a)[1:3, 1:2, 1] == reshape(11:16, 3, 2)
+    @test getindex_count(a) == reads
 end
 
 function test_view(a)
@@ -362,6 +380,17 @@ end
             test_setindex(a)
         end
     end
+    # Repeated indices in a write that is split into batches:
+    for batchstrategy in (DiskArrays.ChunkRead(), DiskArrays.SubRanges())
+        b = AccessCountDiskArray(fill(102, 16); chunksize=(4,), batchstrategy)
+        b[CartesianIndex.([1, 1, 3, 16])] = 1:4
+        @test trueparent(b) == [2; 102; 3; fill(102, 12); 4]
+        @test getindex_log(b) == [(1:3,)]
+    end
+    # Nothing is read for an empty write, whatever the other indices span:
+    e = AccessCountDiskArray(zeros(Int, 4, 0); chunksize=(2, 1))
+    e[[1, 4], Int[]] = zeros(Int, 2, 0)
+    @test getindex_count(e) == 0
 end
 
 @testset "Zerodimensional" begin
