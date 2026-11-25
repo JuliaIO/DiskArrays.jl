@@ -240,6 +240,7 @@ end
     @test subsetchunks(a1, 5:4) === RegularChunks(1, 0, 0)
     @test subsetchunks(a1, 2:2:8) === RegularChunks(3, 2, 4)
     @test subsetchunks(a1, 10:-2:1) === RegularChunks(3, 2, 5)
+    @test subsetchunks(a1, 5:-1:6) === RegularChunks(1, 0, 0)
     a2 = RegularChunks(2, 0, 20)
     @test a2[1] == 1:2
     @test a2[2] == 3:4
@@ -403,6 +404,21 @@ end
     @test iterate(a, 1) == (42, 2)
     @test iterate(a, 2) === nothing
     @test collect(a) == fill(42)
+end
+
+@testset "Reversed views of empty arrays" begin
+    @testset "size $(size(data))" for data in (Float32[], zeros(Float32, 0, 3), zeros(Float32, 3, 0))
+        N = ndims(data)
+        for a in (UnchunkedDiskArray(data), AccessCountDiskArray(data; chunksize=ntuple(_ -> 2, N)))
+            @test collect(reverse(a; dims=1)) == reverse(data; dims=1)
+            @test collect(reverse(a)) == reverse(data)
+        end
+    end
+    a = AccessCountDiskArray(collect(1:10); chunksize=(3,))
+    v = view(a, 5:-1:6)
+    @test isempty(eachchunk(v))
+    @test collect(v) == Int[]
+    @test getindex_count(a) == 0
 end
 
 @testset "Views" begin

@@ -124,6 +124,8 @@ function subsetchunks(chunks::RegularChunks, subsets::AbstractRange)
             newoffset = mod(first(subsets) - 1 + chunks.offset, chunks.chunksize) ÷ step(subsets)
             return RegularChunks(newchunksize, newoffset, length(subsets))
         elseif step(subsets) < 0
+            # An empty range has no last chunk to take the offset from
+            isempty(subsets) && return RegularChunks(1, 0, 0)
             chunks2 = subsetchunks(chunks, last(subsets):first(subsets))::ChunkVector
             newoffset = (chunks.chunksize - length(last(chunks2))) ÷ (-step(subsets))
             return RegularChunks(newchunksize, newoffset, length(subsets))
