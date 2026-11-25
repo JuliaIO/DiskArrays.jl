@@ -178,7 +178,12 @@ end
 function process_index(i::AbstractArray{Bool,N}, chunks, ::NoBatch) where {N}
     chunksnow, chunksrem = splitchunks(i, chunks)
     s = arraysize_from_chunksize.(chunksnow)
-    cindmin, cindmax = extrema(view(CartesianIndices(s), i))
+    v = view(CartesianIndices(s), i)
+    cindmin, cindmax = if isempty(v)
+        oneunit(CartesianIndex{N}), zero(CartesianIndex{N})
+    else
+        extrema(v)
+    end
     indmin, indmax = cindmin.I, cindmax.I
 
     output_size = (sum(i),)

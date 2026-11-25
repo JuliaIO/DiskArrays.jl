@@ -55,6 +55,34 @@ end
     @test a[Int[]] == Float64[]
 end
 
+@testset "Indexing with empty selections" begin
+    data = collect(reshape(1:20, 4, 5))
+    for batchstrategy in (DiskArrays.ChunkRead(), DiskArrays.SubRanges())
+        a = AccessCountDiskArray(copy(data); chunksize=(2, 2), batchstrategy)
+        v = AccessCountDiskArray(vec(copy(data)); chunksize=(3,), batchstrategy)
+        @test v[falses(20)] == Int[]
+        @test a[falses(4, 5)] == Int[]
+        @test a[falses(4), :] == data[falses(4), :]
+        @test a[:, falses(5)] == data[:, falses(5)]
+        @test a[CartesianIndex{2}[]] == Int[]
+        @test getindex_count(a) == getindex_count(v) == 0
+        v[falses(20)] = Int[]
+        a[falses(4, 5)] = Int[]
+        a[CartesianIndex{2}[]] = Int[]
+        # a sparse second index must not make an empty assignment read before writing:
+        a[falses(4), [1, 3]] = zeros(Int, 0, 2)
+        @test getindex_count(a) == 0
+        @test setindex_count(a) == setindex_count(v) == 0
+        @test filter(>(20), v) == Int[]
+        @test filter(>(20), a) == Int[]
+    end
+    for a in (ChunkedDiskArray(copy(data); chunksize=(2, 2)), UnchunkedDiskArray(copy(data)))
+        @test a[falses(4, 5)] == Int[]
+        @test a[:, falses(5)] == data[:, falses(5)]
+        @test filter(>(20), a) == Int[]
+    end
+end
+
 function test_getindex(a)
     @test a[2, 3, 1] == 10
     @test a[CartesianIndex(2, 3), 1] == 10

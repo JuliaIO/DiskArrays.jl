@@ -187,7 +187,7 @@ function setindex_disk_nobatch!(a::AbstractArray, values::AbstractArray, i)
             # we need to read before writing.
             # This check could be optimized away in some cases, when writing unit ranges etc, 
             # but is probably not too expensive
-            readblock!(a, temparray, indices.data_indices...)
+            readblock_checked!(a, temparray, indices.data_indices...)
         end
         # Copy `values` to `temparray`
         transfer_results_write!(values, temparray, indices.output_indices, indices.temparray_indices)

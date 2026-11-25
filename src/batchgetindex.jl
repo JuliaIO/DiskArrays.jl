@@ -103,13 +103,13 @@ function span(a::AbstractArray{<:Integer})
     iszero(length(a)) ? 0 : 1 - (-(extrema(a)...))
 end
 function span(a::AbstractArray{CartesianIndex{N}}) where {N}
+    # Indices without dimensions have no axis that could be empty in the block
+    # that is read or written, so an empty selection of them is not supported
+    N > 0 && isempty(a) && return 0
     minind, maxind = extrema(a)
     prod((maxind - minind + oneunit(minind)).I)
 end
-function span(a::AbstractArray{Bool})
-    minind, maxind = extrema(view(CartesianIndices(size(a)), a))
-    prod((maxind - minind + oneunit(minind)).I)
-end
+span(a::AbstractArray{Bool}) = span(view(CartesianIndices(size(a)), a))
 # The number of indices to actually be read
 numind(a::AbstractArray{Bool}) = sum(a)
 numind(a::Union{AbstractArray{<:Integer},AbstractArray{<:CartesianIndex}}) = length(a)
