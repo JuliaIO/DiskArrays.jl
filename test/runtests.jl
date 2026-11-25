@@ -700,6 +700,28 @@ end
     @test r[] == 0
 end
 
+@testset "Broadcast of a chunked array along singleton and added dimensions" begin
+    row = reshape(collect(1.0:3), 1, 3)
+    for (a, b) in (
+        (ChunkedDiskArray(row; chunksize=(1, 3)), zeros(4, 3)),
+        (ChunkedDiskArray(collect(1.0:3); chunksize=(2,)), zeros(3, 4)),
+        (ChunkedDiskArray(collect(1.0:3); chunksize=(2,)), zeros(3, 1)),
+        (ChunkedDiskArray(reshape(row, 1, 3, 1); chunksize=(1, 2, 1)), zeros(4, 3)),
+        (ChunkedDiskArray(ones(1, 3); chunksize=(1, 3)), zeros(0, 3)),
+        (ChunkedDiskArray(zeros(1, 0); chunksize=(1, 4)), zeros(5, 0)),
+    )
+        ref = parent(a) .+ b
+        s = a .+ b
+        @test sum(c -> prod(map(length, c)), DiskArrays.eachchunk(s); init=0) == length(ref)
+        @test collect(s) == ref
+        @test (zeros(size(b)) .= a .+ b) == (zeros(size(b)) .= parent(a) .+ b)
+    end
+    # A zero-dimensional destination takes the element as it is:
+    d = Array{Any,0}(undef)
+    d .= ChunkedDiskArray([[42]])
+    @test d[] == [42]
+end
+
 if VERSION >= v"1.7.0"
     @testset "Broadcasted assignment with trailing singleton dimensions" begin
         a1 = rand(10, 9, 1, 1)
