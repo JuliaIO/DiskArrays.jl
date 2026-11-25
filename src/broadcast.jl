@@ -77,7 +77,8 @@ function common_chunks(s, args...)
         allchunks = collect(map(eachchunk, chunkedarrays))
         tt = ntuple(N) do n
             csnow = filter(allchunks) do cs
-                ndims(cs) >= n && first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
+                ndims(cs) >= n && !isempty(cs.chunks[n]) &&
+                    first(first(cs.chunks[n])) < last(last(cs.chunks[n]))
             end
             isempty(csnow) && return RegularChunks(1, 0, s[n])
             
