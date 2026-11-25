@@ -1340,6 +1340,13 @@ end
     @test occursin("5×5×4", sp)
     @test occursin("(1:2", sp)
     @test occursin("10:10)", sp)
+    @test (@capture_out show(IOBuffer(), chunks)) == ""
+    @test repr(chunks) == """
+        GridChunks(
+            RegularChunks(2, 0, 10),
+            RegularChunks(2, 0, 10),
+            RegularChunks(3, 0, 10),
+        )"""
 end
 
 @testset "Show RegularChunks" begin
