@@ -75,6 +75,17 @@ end
         @test setindex_count(a) == setindex_count(v) == 0
         @test filter(>(20), v) == Int[]
         @test filter(>(20), a) == Int[]
+        # An empty selection next to an index that is read in batches:
+        bdata = collect(reshape(1:200, 20, 10))
+        b = AccessCountDiskArray(copy(bdata); chunksize=(4, 2), batchstrategy)
+        @test b[[1, 20], Int[]] == bdata[[1, 20], Int[]]
+        @test b[[1, 20], falses(10)] == bdata[[1, 20], falses(10)]
+        @test b[falses(20), [1, 10]] == bdata[falses(20), [1, 10]]
+        @test b[zeros(Int, 0, 2), [1, 10]] == bdata[zeros(Int, 0, 2), [1, 10]]
+        b[[1, 20], Int[]] = zeros(Int, 2, 0)
+        b[falses(20), [1, 10]] = zeros(Int, 0, 2)
+        @test getindex_count(b) == setindex_count(b) == 0
+        @test trueparent(b) == bdata
     end
     for a in (ChunkedDiskArray(copy(data); chunksize=(2, 2)), UnchunkedDiskArray(copy(data)))
         @test a[falses(4, 5)] == Int[]
