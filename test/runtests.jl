@@ -429,6 +429,30 @@ import Statistics: mean
     end
 end
 
+@testset "Reductions of empty arrays" begin
+    @testset "size $(size(data))" for data in (Float32[], zeros(Float32, 3, 0), zeros(Float32, 0, 3))
+        N = ndims(data)
+        for a in (
+            UnchunkedDiskArray(data),
+            AccessCountDiskArray(data; chunksize=ntuple(_ -> 1, N)),
+            AccessCountDiskArray(data; chunksize=ntuple(_ -> 2, N)),
+        )
+            @test sum(a) === sum(data)
+            @test sum(abs, a) === sum(abs, data)
+            @test prod(a) === prod(data)
+            @test all(>(0), a) === all(>(0), data)
+            @test any(>(0), a) === any(>(0), data)
+            @test count(>(0), a) === count(>(0), data)
+            @test unique(a) == unique(data)
+            @test maximum(abs, a) === maximum(abs, data)
+            # As for an empty `Array`, there is no neutral element to return:
+            @test_throws "reducing over an empty collection" maximum(a)
+            @test_throws "reducing over an empty collection" minimum(a)
+            a isa AccessCountDiskArray && @test getindex_count(a) == 0
+        end
+    end
+end
+
 @testset "Broadcast" begin
     for batchstrategy in (DiskArrays.ChunkRead(), DiskArrays.SubRanges())
         a_disk1 = AccessCountDiskArray(rand(10, 9, 2); chunksize=(5, 3, 2), batchstrategy)
