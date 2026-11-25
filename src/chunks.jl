@@ -217,12 +217,12 @@ function GridChunks(sizes::Tuple, chunksizes::Tuple; offset=(_ -> 0).(sizes))
 end
 function Base.show(io::IO, gridchunks::GridChunks)
     println(io, "GridChunks(")
-    map(gridchunks.chunks) do chunks
-        println("    ")
+    foreach(gridchunks.chunks) do chunks
+        print(io, "    ")
         show(io, chunks)
-        print(",")
+        println(io, ",")
     end
-    println(io, ")")
+    print(io, ")")
 end
 
 # Base methods
