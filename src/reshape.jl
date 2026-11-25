@@ -104,6 +104,6 @@ macro implement_reshape(t)
 end
 
 # For ambiguity
-function Base._reshape(A::AbstractDiskArray{<:Any,1}, dims::Tuple{Int64})
+function Base._reshape(A::AbstractDiskArray{<:Any,1}, dims::Tuple{Int})
     return reshape_disk(A, dims)
 end
