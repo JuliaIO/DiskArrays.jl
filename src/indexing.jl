@@ -116,6 +116,39 @@ function getindex_disk_nobatch!(out::Union{Nothing,AbstractArray}, a::AbstractAr
     return outputarray
 end
 
+# The number of distinct positions an index selects. Repeated indices are
+# counted once, with a bitmap over their span:
+numdistinct(ind::AbstractArray{Bool}) = numind(ind)
+function numdistinct(ind::AbstractArray{<:Integer})
+    (isempty(ind) || ind isa AbstractRange) && return length(ind)
+    lo, hi = extrema(ind)
+    seen = falses(hi - lo + 1)
+    for i in ind
+        seen[i - lo + 1] = true
+    end
+    return count(seen)
+end
+function numdistinct(ind::AbstractArray{CartesianIndex{N}}) where {N}
+    isempty(ind) && return 0
+    lo, hi = extrema(ind)
+    seen = falses((hi - lo + oneunit(lo)).I)
+    for i in ind
+        seen[(i - lo + oneunit(lo)).I...] = true
+    end
+    return count(seen)
+end
+
+# A block can be written without reading it first only if the indices select
+# every element in their span, otherwise the elements between them would be
+# written back uninitialized. Fewer indices than the span cannot cover it, so
+# the bitmap is only built when they could, which bounds its size by their
+# number. Callers skip empty blocks, whose indices can span any size:
+function needs_read_before_write(ind)
+    s = span(ind)
+    return numind(ind) < s || numdistinct(ind) < s
+end
+needs_read_before_write(::Union{Colon,Integer}) = false
+
 """
     setindex_disk!(A::AbstractArray, v, i...)
 
@@ -158,7 +191,7 @@ function setindex_disk_batch!(a::AbstractArray, values::AbstractArray, i)
         transfer_results_write!(values, temparray, output_indices, temparray_indices)
         # Maybe view the array if we only need a subset
         vtemparray = maybeshrink(temparray, data_indices)
-        if any(ind -> is_sparse_index(ind; density_threshold=1.0), temparray_indices)
+        if !isempty(vtemparray) && any(needs_read_before_write, temparray_indices)
             readblock!(a, vtemparray, data_indices...)
             transfer_results_write!(values, temparray, output_indices, temparray_indices)
         end
@@ -182,7 +215,7 @@ function setindex_disk_nobatch!(a::AbstractArray, values::AbstractArray, i)
     else # :noalign
         # Blocks don't match, may need to read from `a` to `temparray` to fill gaps in the values
         temparray = Array{eltype(a)}(undef, indices.temparray_size...)
-        if any(ind -> is_sparse_index(ind; density_threshold=1.0), indices.temparray_indices)
+        if !isempty(temparray) && any(needs_read_before_write, indices.temparray_indices)
             # We have some sparse indexing pattern and are not in a batch situation, so
             # we need to read before writing.
             # This check could be optimized away in some cases, when writing unit ranges etc, 
