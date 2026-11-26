@@ -72,7 +72,14 @@ function common_chunks(s, args...)
     if isempty(chunkedarrays)
         return estimate_chunksize(s, sum(element_size ∘ eltype, args))
     elseif length(chunkedarrays) == 1
-        return eachchunk(only(chunkedarrays))
+        ar = only(chunkedarrays)
+        cs = eachchunk(ar)
+        # The argument has no chunks to lend to a dimension that it lacks or
+        # along which it is expanded:
+        lends(n) = n <= ndims(cs) && (size(ar, n) != 1 || s[n] == 1)
+        all(lends, 1:N) && return cs
+        tt = ntuple(n -> lends(n) ? cs.chunks[n] : RegularChunks(1, 0, s[n]), N)
+        return GridChunks(tt...)
     else
         allchunks = collect(map(eachchunk, chunkedarrays))
         tt = ntuple(N) do n
