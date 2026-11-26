@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased]
 
+- `cat`, `vcat` and `hcat` with zero-length arrays in any position no longer throw, keep
+  the chunks of the non-empty arrays and never read from or write to the empty ones
+- `cat`, `vcat` and `hcat` of arrays whose chunk grid has an offset keep the chunks of
+  those arrays
 - Reduce method invalidations when loading DiskArrays (roughly 900 fewer invalidated
   `MethodInstance`s in a fresh session):
   - Generators over disk arrays no longer override the `Base.Generator` constructor.
